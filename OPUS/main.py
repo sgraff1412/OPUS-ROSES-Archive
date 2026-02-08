@@ -19,7 +19,7 @@ import pandas as pd
 from utils.ADRParameters import ADRParameters
 from utils.ADR import optimize_ADR_removal, implement_adr
 from utils.EconCalculations import EconCalculations
-from optimize_ADR import OptimizeADR
+from utils.optimize_ADR import OptimizeADR
 from itertools import repeat
 
 from concurrent.futures import ProcessPoolExecutor
@@ -727,8 +727,12 @@ if __name__ == "__main__":
         #                             scenario_files, 
         #                             config_list, 
         #                             sim_name_list))
-        
-    # # # sammie addition: running the optimizer version of IAM Solver for shell-switching
+
+
+    """
+        Running Greedy Optimization:
+        Uncomment the lines below, configure the parameters to suit your needs, then hit run as normal.
+    """
     # optimization_solver = OptimizeADR()
 
     # ts = ["N_700kg"] # target species
@@ -741,7 +745,7 @@ if __name__ == "__main__":
     # rc = np.linspace(0, 5000000, num=2) # could also switch to range(x,y) similar to target_shell
     # disposal_times = [5,25]
 
-    # # # sammie addition: running the "grid_setup" function for "optimization" based on lower welfare values
+    # # running the "grid_setup" function for "optimization" based on lower welfare values
     # MOCAT, scenario_files, best_umpy = grid_setup(simulation_name=simulation_name, target_species=ts, target_shell=target_shell, amount_remove=tn, removal_cost=rc, tax_rate=tax, bond=bond, ouf=ouf, disposal_times=disposal_times)
 
 

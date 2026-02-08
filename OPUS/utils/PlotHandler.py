@@ -528,12 +528,12 @@ class PlotHandler:
                                         ax.plot(x_axis, sp_count, label=scenario_name, marker='>')
                                 else:
                                         ax.plot(x_axis, sp_count, label=scenario_name, marker='*')
-
-                        if idx == 0:  # First plot
-                                ax.set_title("LEO Species Total")
-                        else:
-                                ax.set_title(f"Total Count across all shells: {species}")
-                        ax.set_xlabel("Time Steps")
+                        ax.set_title(f"Total Count across all shells: {species}")
+                        # if idx == 0:  # First plot
+                        #         ax.set_title("LEO Species Total")
+                        # else:
+                        #         ax.set_title(f"Total Count across all shells: {species}")
+                        ax.set_xlabel("Time (Years)")
                         ax.set_ylabel("Total Count")
                         ax.legend()
                         ax.grid(True)
@@ -590,7 +590,7 @@ class PlotHandler:
                                 plt.plot(timesteps, umpy_sums, label=scenario_label, marker='*')
 
                 # 4) Labels, legend, and layout
-                plt.xlabel("Year (timestep)")
+                plt.xlabel("Time (Years)")
                 plt.ylabel("UMPY (kg/year)")
                 # plt.title("UMPY Evolution Over Time (All Scenarios)")  # Removed overall title
                 plt.legend()
@@ -1001,7 +1001,7 @@ class PlotHandler:
                         plt.plot(time_axis, welfare_base, label=f"{label} (Satellites Only)", linewidth=2, linestyle='--')
                         plt.plot(time_axis, welfare_total, label=f"{label} (Satellites + Bond Revenue)", linewidth=2, linestyle='-')
 
-                plt.xlabel("Year", fontsize=12)
+                plt.xlabel("Time (Years)", fontsize=12)
                 plt.ylabel("Welfare", fontsize=12)
                 plt.legend(title="Scenario", fontsize=10, loc='upper left')
                 plt.grid(True)
@@ -1426,7 +1426,7 @@ class PlotHandler:
                 plt.plot(time_steps, grand_total, label='Grand Total', 
                         color='black', linewidth=3, linestyle='--')
                 
-                plt.xlabel('Time Steps')
+                plt.xlabel('Time (Years)')
                 plt.ylabel('Total Number of Objects')
                 plt.title('Total Objects Over Time by Species Group')
                 plt.legend()
@@ -1559,7 +1559,7 @@ class PlotHandler:
                 axes[1].grid(True, alpha=0.3)
                 
                 axes[2].set_title('Derelict Objects (D) Over Time', fontsize=14, fontweight='bold')
-                axes[2].set_xlabel('Time Steps')
+                axes[2].set_xlabel('Time (Years)')
                 axes[2].set_ylabel('Total Number of Objects')
                 axes[2].legend()
                 axes[2].grid(True, alpha=0.3)
@@ -2605,13 +2605,13 @@ class PlotHandler:
                                         ax.plot(x_axis, sp_count, label=scenario_name, marker='>')
                                 elif (scenario_name != "Baseline"):
                                         ax.plot(x_axis, sp_count, label=scenario_name, marker='*')
-
-                        if idx == 0:  # First plot
-                                ax.set_title("LEO Species Total")
-                        else:
-                                ax.set_title(f"Relative count across all shells: {species}")
-                        ax.set_xlabel("Time Steps")
-                        ax.set_ylabel("Total Count")
+                        ax.set_title(f"Relative count across all shells: {species}")
+                        # if idx == 0:  # First plot
+                        #         ax.set_title("LEO Species Total")
+                        # else:
+                        #         ax.set_title(f"Relative count across all shells: {species}")
+                        ax.set_xlabel("Time (Years)")
+                        ax.set_ylabel("Species Count")
                         ax.legend()
                         ax.grid(True)
 

@@ -204,7 +204,7 @@
         "n_remove":[10],
         "target_shell":[1],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S2":{
         "target_species":["N_700kg"],
@@ -213,7 +213,7 @@
         "n_remove":[10],
         "target_shell":[2],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S3":{
         "target_species":["N_700kg"],
@@ -222,7 +222,7 @@
         "n_remove":[10],
         "target_shell":[3],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S4":{
         "target_species":["N_700kg"],
@@ -231,7 +231,7 @@
         "n_remove":[10],
         "target_shell":[4],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S5":{
         "target_species":["N_700kg"],
@@ -240,7 +240,7 @@
         "n_remove":[10],
         "target_shell":[5],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S6":{
         "target_species":["N_700kg"],
@@ -249,7 +249,7 @@
         "n_remove":[10],
         "target_shell":[6],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S7":{
         "target_species":["N_700kg"],
@@ -258,7 +258,7 @@
         "n_remove":[10],
         "target_shell":[7],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S8":{
         "target_species":["N_700kg"],
@@ -267,7 +267,7 @@
         "n_remove":[10],
         "target_shell":[8],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S9":{
         "target_species":["N_700kg"],
@@ -276,7 +276,7 @@
         "n_remove":[10],
         "target_shell":[9],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S10":{
         "target_species":["N_700kg"],
@@ -285,7 +285,7 @@
         "n_remove":[10],
         "target_shell":[10],
         "n_max": 2,
-        "exogenous":0
+        "exogenous":1
     },
     "Target_S11":{
         "target_species":["N_700kg"],
