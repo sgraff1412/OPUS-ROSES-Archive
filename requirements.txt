@@ -13,3 +13,4 @@ imageio
 sphinx_rtd_theme
 pyssem==0.1.dev294
 joblib
+seaborn
