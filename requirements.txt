@@ -11,5 +11,6 @@ matplotlib
 loky
 imageio
 sphinx_rtd_theme
-pyssem==0.1.dev294
+pyssem>=0.1.dev407, <= 0.1.dev458
 joblib
+seaborn
