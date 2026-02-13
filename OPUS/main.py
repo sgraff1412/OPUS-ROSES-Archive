@@ -206,8 +206,7 @@ class IAMSolver:
         ### CONFIGURE ECONOMIC PARAMETERS
         #################################
         
-        # sammie addition:
-        adr_times = [5, 10, 15, 20]
+        # adr_times = [5, 10, 15, 20]
         econ_params_gen = EconParameters(self.econ_params_json, mocat=self.MOCAT)
         econ_params_gen.econ_params_for_ADR(scenario_name)
         econ_calculator = EconCalculations(econ_params_gen, initial_removal_cost=5000000)
@@ -270,10 +269,6 @@ class IAMSolver:
 
         adr_params = ADRParameters(self.adr_params_json, mocat=self.MOCAT)
         adr_params.adr_parameter_setup(scenario_name)
-        # for species in multi_species.species:
-        #     if species.adr_params is None:
-        #         species.adr_params.adr_parameter_setup(scenario_name)
-
 
         #Finding fringe and constellation slices
         constellation_sats_idx = None
@@ -376,7 +371,6 @@ class IAMSolver:
             environment_before_adr = environment_for_solver.copy()
 
             if ((adr_params.adr_times is not None) and (time_idx in adr_params.adr_times) and (len(adr_params.adr_times) != 0)):
-                # environment_for_solver, ~ = implement_adr(environment_for_solver,self.MOCAT,adr_params)
                 environment_for_solver, removal_dict = optimize_ADR_removal(environment_for_solver,self.MOCAT,adr_params)
                 num_removed_this_period = int(np.sum(environment_before_adr - environment_for_solver))
                 # num_removed_this_period = 0
@@ -537,6 +531,9 @@ def process_optimizer_scenario_ADR(scenario_name, MOCAT_config, simulation_name,
     return None, iam_solver_optimize.adr_dict, iam_solver_optimize.welfare_dict
 
 def grid_setup(simulation_name, target_species, target_shell, amount_remove, removal_cost, tax_rate, bond, ouf, disposal_times):
+        """
+        Setting up grid for greedy optimization with defined params
+        """
         # Calculate array size based on all combinations + 1 for Baseline
         # Added len(disposal_times) to the multiplication
         num_scenarios = (len(target_species) * len(target_shell) * len(amount_remove) * len(removal_cost) * len(tax_rate) * len(bond) * len(ouf) * len(disposal_times)) + 1

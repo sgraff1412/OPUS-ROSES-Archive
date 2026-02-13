@@ -1237,6 +1237,9 @@ class PlotHandler:
 
 
         def UMPY(self, plot_data, other_data):
+                """
+                Plot of UMPY over time for an individual scenario.
+                """
                  # 1) Sort the timesteps and prepare arrays
                 timesteps = sorted(other_data.keys(), key=int)  
                 umpy_sums = []
@@ -2534,7 +2537,7 @@ class PlotHandler:
 
         def comparison_count_relative_to_baseline(self, plot_data_lists, other_data_lists):
                 """
-                Creates a comparison plot of total species count over time.
+                Creates a comparison plot of total species count over time with baseline amounts subtracted from the totals.
                 Each species is plotted in its own subplot, comparing across all scenarios.
                 """
 

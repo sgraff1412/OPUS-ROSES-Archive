@@ -3,6 +3,9 @@ import json
 import numpy as np
 
 class PostProcessing:
+    """
+    Class for storing and processing data from simulations. 
+    """
     def __init__(self, MOCAT, scenario_name, simulation_name, species_data, other_results, econ_params, grid_search=False):
         self.MOCAT = MOCAT
         self.scenario_name = scenario_name # this is the breadkdown of the scenario
