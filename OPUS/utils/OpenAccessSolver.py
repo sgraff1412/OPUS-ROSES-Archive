@@ -53,7 +53,7 @@ class OpenAccessSolver:
         # Calculate excess returns
         self.lam[self.fringe_start_slice:self.fringe_end_slice] = launches
 
-        # Fringe_launches = self.fringe_launches # This will be the first guess by the model 
+        # Fringe_launches = self.fringe_launches. This will be the first guess by the model 
         state_next_path = self.MOCAT.propagate(self.tspan, self.x0, self.lam)
         state_next = state_next_path[-1, :]
 

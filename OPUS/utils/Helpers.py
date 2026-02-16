@@ -22,7 +22,6 @@ def insert_launches_into_lam(lam_vector, launches, multi_species, elliptical):
         species_launch = launches[pointer:pointer + n_shells]
         
         if elliptical:
-            # launches are now in a 3d matrix
             lam_vector[:, species.species_idx, 0] = species_launch
         else:
             lam_vector[start_slice:end_slice] = species_launch

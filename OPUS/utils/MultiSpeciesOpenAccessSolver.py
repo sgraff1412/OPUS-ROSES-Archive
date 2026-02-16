@@ -173,34 +173,19 @@ class MultiSpeciesOpenAccessSolver:
     def fringe_rate_of_return(self, state_matrix, collision_risk, opus_species, cost=None):
         """
          Calcualtes the fringe rate of return.
+         Modified: Removed substitution and competitor logic.
         """
 
-     # 1. Calculate Own Population
+        # 1. Calculate Own (species-specific) Population
         if self.elliptical:
             own_pop = np.sum(state_matrix[:, opus_species.species_idx, 0])
         else:
             own_pop = np.sum(state_matrix[opus_species.start_slice:opus_species.end_slice])
 
-        # 2. Calculate Competitor Population
-        competitor_sum = 0.0
-        if hasattr(opus_species.econ_params, 'competitors'):
-            for competitor_name in opus_species.econ_params.competitors:
-                # Find the competitor species object
-                competitor_species = next((s for s in self.multi_species.species if s.name == competitor_name), None)
-                
-                if competitor_species:
-                    if self.elliptical:
-                        competitor_pop = state_matrix[:, competitor_species.species_idx, 0]
-                    else:
-                        competitor_pop = state_matrix[competitor_species.start_slice:competitor_species.end_slice]
-                    
-                    competitor_sum += np.sum(competitor_pop)
+        # 2. Set Market Supply directly to Own Population
+        effective_market_supply = own_pop
 
-        # 3. Apply Substitution Rate (Gamma)
-        gamma = getattr(opus_species.econ_params, 'substitution_rate', 0)
-        effective_market_supply = own_pop + (gamma * competitor_sum)
-
-        # 4. Calculate Revenue
+        # 3. Calculate Revenue
         revenue = opus_species.econ_params.intercept - opus_species.econ_params.coef * effective_market_supply
 
         discount_rate = opus_species.econ_params.discount_rate
@@ -214,10 +199,10 @@ class MultiSpeciesOpenAccessSolver:
             total_cost = base_cost
         rev_cost = revenue / total_cost
       
+        #Calculate bond impact
         if opus_species.econ_params.bond is None:
             rate_of_return = rev_cost - discount_rate - depreciation_rate + depreciation_rate*collision_risk
         else:
-            #Updated the below the annualize the cost of the bond, in line with other calculations
             bond_value = opus_species.econ_params.bond
             comp_rate = opus_species.econ_params.comp_rate
             
@@ -259,12 +244,14 @@ class MultiSpeciesOpenAccessSolver:
         
         lower_bound = np.zeros_like(launch_rate_init)
 
+        #Parameters for solving differential equations
         solver_options = {
-            'method': 'trf',
-            'verbose': 1,
-            'ftol': 1e-7,
-            'xtol': 1e-7,
-            'gtol': 1e-7,
+            'method': 'dogbox',
+            'verbose': 2,
+            'ftol': 1e-3,
+            'xtol': 1e-3,
+            'gtol': 1e-3,
+            'max_nfev': 1000
         }
 
         result = least_squares(

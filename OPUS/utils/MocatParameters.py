@@ -47,9 +47,8 @@ def configure_mocat(MOCAT_config: json, multi_species: MultiSpecies = None, grid
     MOCAT.configure_species(species)
     # Create an active_loss_setup for each of the species in the model.
     if multi_species != None:
-        # Commented out opus_collisions_setup as it doesn't exist in current pyssem version
         for species in multi_species.species:
-            # get maneuverability from species, where ['active'] list has sym_name of the species
+            # Get maneuverability from species, where ['active'] list has sym_name of the species
             mocat_species = next((mocat_species for mocat_species in MOCAT.scenario_properties.species['active'] if mocat_species.sym_name == species.name), None)
             if mocat_species.maneuverable:
                 MOCAT.opus_collisions_setup(species.name, maneuvers=True)
@@ -59,7 +58,7 @@ def configure_mocat(MOCAT_config: json, multi_species: MultiSpecies = None, grid
                 species.maneuverable = False
         pass
 
-    # Build the model - removed elliptical parameter as it may not be supported
+    # Build the model
     MOCAT.build_model()
 
     print("You have these species in the model: ", MOCAT.scenario_properties.species_names)

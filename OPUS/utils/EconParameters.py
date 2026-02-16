@@ -76,29 +76,27 @@ class EconParameters:
 
         # Here using the ballastic coefficient of the species, we are trying to find the highest compliant altitude/shell
         for k in range(self.mocat.scenario_properties.n_shells):
-            #rhok = density_jb2008(self.mocat.scenario_properties.R0_km[k], solar_activity='medium')
             rhok = densityexp(self.mocat.scenario_properties.R0_km[k])
-            # satellite 
-            beta = 0.0172 # ballastic coefficient, area * mass * drag coefficient. This should be done for each species!
+            beta = 0.0172 # ballastic coefficient, area * mass * drag coefficient. 
             rvel_current_D = -rhok * beta * np.sqrt(self.mocat.scenario_properties.mu * self.mocat.scenario_properties.R0[k]) * (24 * 3600 * 365.25)
             shell_marginal_decay_rates[k] = -rvel_current_D/self.mocat.scenario_properties.Dhl
             shell_marginal_residence_times[k] = 1/shell_marginal_decay_rates[k]
         
         self.shell_cumulative_residence_times = np.cumsum(shell_marginal_residence_times)
 
-        # Find the index of shell_cumulative_residence_times, k_star, which is the largest index that  shell_cumulative_residence_times(k_star) <= self.disposalTime
+        # Find the index of shell_cumulative_residence_times, k_star, which is the largest index that shell_cumulative_residence_times(k_star) <= self.disposalTime
         indices = np.where(self.shell_cumulative_residence_times <= self.disposal_time)[0]
         k_star = max(indices) if len(indices) > 0 else 0
 
         # Physics based cost function using delta-v and deorbit requirements
         v_drag = np.zeros(self.mocat.scenario_properties.n_shells)
-        delta_t = 24 * 3600 * 365.25 # time inteval in seconds
+        delta_t = 24 * 3600 * 365.25 # Time inteval in seconds
 
         # Calculate drag delta-v for stationkeeping maneuvers
         for k in range(self.mocat.scenario_properties.n_shells):
             rhok = densityexp(self.mocat.scenario_properties.R0_km[k])
             orbital_velocity = np.sqrt(self.mocat.scenario_properties.mu / self.mocat.scenario_properties.R0[k])
-            F_drag = 2.2 * 0.5 * rhok * orbital_velocity**2 * 1.741 # this is cd and area and have been hard coded
+            F_drag = 2.2 * 0.5 * rhok * orbital_velocity**2 * 1.741 # This is cd and area and have been hard coded
             v_drag[k] = F_drag / self.mass * delta_t * 1e-3
 
         # Calculate the delta-v for deorbiting
@@ -114,8 +112,8 @@ class EconParameters:
         target_orbit_delta_v = np.maximum(0, target_orbit_delta_v)
         self.total_deorbit_delta_v = original_orbit_delta_v + target_orbit_delta_v
 
-        # delta-v budget for mission
-        delta_v_budget = 1.5 * self.sat_lifetime * v_drag + 100 # adding a safety margin
+        # Delta-v budget for mission
+        delta_v_budget = 1.5 * self.sat_lifetime * v_drag + 100 # Adding a safety margin
 
         # Indicator for altitudes that are normally compliant
         self.naturally_compliant_vector = np.zeros(self.mocat.scenario_properties.n_shells)
@@ -137,13 +135,12 @@ class EconParameters:
         self.deorbit_maneuver_cost = self.total_deorbit_delta_v * self.delta_v_cost
         self.stationkeeping_cost = delta_v_budget * self.delta_v_cost
 
-        # self.cost = (self.total_lift_price + self.stationkeeping_cost + self.lifetime_loss_cost + self.deorbit_maneuver_cost * (1 - 0)).tolist() # should be self.mocat.scenario_properties.P which is the probability of regulatory non-compliance. 
         self.cost = (self.total_lift_price + self.stationkeeping_cost + self.lifetime_loss_cost + self.deorbit_maneuver_cost * (1 - 0)).tolist()
         self.v_drag = v_drag
         self.k_star = k_star 
 
-        #BOND CALCULATIONS - compliance rate is defined in MOCAT json
-        self.comp_rate = np.ones_like(self.total_lift_price) #* self.mocat.scenario_properties.species['active'][1].Pm # 0.95
+        #BOND CALCULATIONS - ompliance rate is defined in MOCAT json
+        self.comp_rate = np.ones_like(self.total_lift_price)
         
         if self.bond is None:
             self.comp_rate = np.where(self.naturally_compliant_vector != 1, pmd_rate, self.comp_rate)
@@ -151,10 +148,6 @@ class EconParameters:
             expected_deorbit_costs = (self.lifetime_loss_cost + self.deorbit_maneuver_cost) * self.comp_rate
             self.cost = (self.total_lift_price + self.stationkeeping_cost + expected_deorbit_costs)
             return 
-
-        # Scale the bond with the mass of the satellite. Full bond cost = bond/700 kg
-        # bond_per_kg = self.bond / 700
-        # self.bond = bond_per_kg * self.mass
         
         self.discount_factor = 1/(1+self.discount_rate)
         self.bstar = (
@@ -166,8 +159,6 @@ class EconParameters:
 
         # Calculate compliance rate. 
         mask = self.bstar != 0  # Identify where bstar is nonzero
-        # non_comp_rate = 1 - pmd_rate
-        # self.comp_rate[mask] = np.minimum(pmd_rate + non_comp_rate * self.bond / self.bstar[mask], 1)
 
         # With Option 1 quation 
         A = 57
@@ -192,10 +183,9 @@ class EconParameters:
             self.tax = 0
             return
 
-        # read the csv file - must be in the configuration folder
+        # Read the csv file - must be in the configuration folder
         path = f"./OPUS/configuration/{configuration}.csv"
 
-        # read the csv file
         parameters = pd.read_csv(path)
         
         for i, row in parameters.iterrows():
@@ -212,12 +202,6 @@ class EconParameters:
                 print(f'Warning: Unknown parameter_type: {parameter_type}')
 
     def econ_params_for_ADR(self, configuration):
-        # if scenario_name.startswith("Baseline"):
-        #     self.tax = 0
-        #     self.bond = None
-        #     self.ouf = 0
         path = f"./OPUS/configuration/{configuration}.csv"
         if not ((configuration).startswith("Baseline")) and (os.path.exists(path)):
             self.modify_params_for_simulation(configuration)
-        
-        # self.calculate_cost_fn_parameters(pmd_rate, configuration)

@@ -19,7 +19,6 @@ class EconCalculations:
         self.removal_cost = initial_removal_cost
 
         # --- State Variable ---
-        # available for removals at the start of a period (previous revenue + all rollovers).
         self.total_funds_for_removals = 0.0
 
     def get_removals_for_current_period(self):
@@ -89,7 +88,7 @@ def revenue_open_access_calculations(open_access_inputs, state_next):
         
         # Calculate bond revenue: (non-compliance rate) * (sats at EOL) * (bond value)
         revenue_by_shell = (1 - fringe_econ_params.comp_rate) * sats_at_eol * fringe_econ_params.bond
-        # SET the attribute on the solver object instead of reading it
+        # Set the attribute on the solver object instead of reading it
         open_access_inputs.bond_revenue = revenue_by_shell                # bond
         open_access_inputs._revenue_type = "bond"
 
@@ -101,13 +100,11 @@ def revenue_open_access_calculations(open_access_inputs, state_next):
     # Use fringe_econ_params
     elif fringe_econ_params.tax != 0: #tax
         Cp            = collision_probability
-        # Use fringe_econ_params
         cost_per_sat  = np.asarray(fringe_econ_params.cost)
-        # Use fringe_econ_params
         revenue_by_shell = fringe_econ_params.tax * Cp * cost_per_sat * fringe_total
         open_access_inputs._revenue_type = "tax"
 
-    else:                                                      # nothing levied
+    else:  # nothing levied
         revenue_by_shell = np.zeros_like(fringe_total)
         open_access_inputs._revenue_type = "none"
 
@@ -115,10 +112,8 @@ def revenue_open_access_calculations(open_access_inputs, state_next):
 
     _last_tax_revenue   = revenue_by_shell
     _last_total_revenue = float(total_revenue)
-    # Use fringe_econ_params
     _dbg_tax_rate       = fringe_econ_params.tax
     _dbg_Cp             = collision_probability  
-    # Use fringe_econ_params
     _dbg_cost_per_sat   = np.asarray(fringe_econ_params.cost)
     _dbg_fringe_total   = fringe_total
 
