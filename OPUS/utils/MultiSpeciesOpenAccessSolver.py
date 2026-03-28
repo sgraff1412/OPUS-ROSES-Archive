@@ -13,7 +13,7 @@ from .EconCalculations import revenue_open_access_calculations
 class MultiSpeciesOpenAccessSolver:
     # UPDATED __init__ signature
     def __init__(self, MOCAT: Model, solver_guess, x0, revenue_model, 
-                 lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice):
+                 lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice, static_maneuver_prices=None):
         """
         Initialize the MultiSpeciesOpenAccessSolver.
         """
@@ -34,6 +34,7 @@ class MultiSpeciesOpenAccessSolver:
         self.bond_revenue = 0.0
         self.fringe_start_slice = fringe_start_slice
         self.fringe_end_slice = fringe_end_slice
+        self.static_maneuver_prices = static_maneuver_prices or {}
 
         # This is the number of all objects in each shell. Starts as x0 (initial population)
         self.current_environment = x0 
@@ -44,6 +45,8 @@ class MultiSpeciesOpenAccessSolver:
         self._last_rate_of_return = None 
         self._last_non_compliance = None
         self._last_compliance = None
+        self._last_maneuver_cost = None
+        self.target_annual_maneuver_cost = 100000.0
 
     def excess_return_calculator(self, launches):
         """
@@ -89,37 +92,41 @@ class MultiSpeciesOpenAccessSolver:
 
             if species.maneuverable:
                 maneuvers = self.calculate_maneuvers(state_next_alt, species.name)
-                cost = maneuvers * 10000 * 2 # $10,000 per maneuver
-                
+                            
+                # --- APPLYING STATIC MANEUVER COSTS ---
+                cost_multiplier = self.static_maneuver_prices.get(species.name, 0.0)
+                maneuver_cost = maneuvers * cost_multiplier
+                            
                 if self.elliptical:
-                    rate_of_return = self.fringe_rate_of_return(state_next_sma, collision_probability, species, cost)
+                    rate_of_return = self.fringe_rate_of_return(state_next_sma, collision_probability, species, maneuver_cost)
                 else:
-                    rate_of_return = self.fringe_rate_of_return(state_next_alt, collision_probability, species, cost)
+                    rate_of_return = self.fringe_rate_of_return(state_next_alt, collision_probability, species, maneuver_cost)
             else:
+                maneuver_cost = np.zeros_like(collision_probability) # Zero cost if not maneuverable
                 if self.elliptical:
                     rate_of_return = self.fringe_rate_of_return(state_next_sma, collision_probability, species)
                 else:
                     rate_of_return = self.fringe_rate_of_return(state_next_alt, collision_probability, species)
 
             # Calculate the excess rate of return
-            #Get OUF
+                #Get OUF
             base_ouf = getattr(species.econ_params, 'ouf', 0.0)
             cost_per_sat = species.econ_params.cost
             ouf_impact = (base_ouf * collision_probability) / cost_per_sat
             species_excess_returns=(rate_of_return - collision_probability*(1 + species.econ_params.tax) - ouf_impact) * 100
-            
+                
             excess_returns[species.name] = species_excess_returns
             collision_probability_dict[species.name] = collision_probability
             rate_of_return_dict[species.name] = rate_of_return
-            if species.maneuverable: # Only store if maneuverable
+            if species.maneuverable:
                 maneuvers_dict[species.name] = maneuvers
-                cost_dict[species.name] = cost
+                cost_dict[species.name] = maneuver_cost # Store the new variable
 
         # Save the collision_probability for all species
         self._last_collision_probability = collision_probability_dict
         self._last_excess_returns = excess_returns
         self._last_multi_species = multi_species
-        self._last_cost = cost_dict
+        self._last_maneuver_cost = cost_dict
         self._last_rate_of_return = rate_of_return_dict
         self._last_maneuvers = maneuvers_dict
         if self.elliptical:

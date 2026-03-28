@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -1977,8 +1978,8 @@ class PlotHandler:
                                         # Extract cost data over time from other_data
                                         cost_data = []
                                         for timestep in timesteps:
-                                                if 'cost' in other_data[timestep] and species_name in other_data[timestep]['cost']:
-                                                        cost_data.append(other_data[timestep]['cost'][species_name])
+                                                if 'maneuver_cost' in other_data[timestep] and species_name in other_data[timestep]['maneuver_cost']:
+                                                        cost_data.append(other_data[timestep]['maneuver_cost'][species_name])
                                                 else:
                                                         cost_data.append([0] * self.n_shells)  # Default to zeros
                                         

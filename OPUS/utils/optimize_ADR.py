@@ -18,7 +18,7 @@ import pandas as pd
 
 from utils.ADRParameters import ADRParameters
 from utils.ADR import optimize_ADR_removal, implement_adr
-from utils.EconCalculations import EconCalculations
+from utils.EconCalculations import EconCalculations, calibrate_static_maneuver_price
 from itertools import repeat
 
 
@@ -41,6 +41,7 @@ class OptimizeADR:
         self.welfare_dict = {}
         self.adr_dict = {}
         self.config = None
+        self.target_annual_maneuver_cost = 100000.0
 
     @staticmethod
     def optimizer_get_species_position_indexes(MOCAT, multi_species):
@@ -190,7 +191,16 @@ class OptimizeADR:
             self.MOCAT.scenario_properties.x0 = self.MOCAT.scenario_properties.x0.T.values.flatten()           
 
         # Set current environment as initial conditions from MOCAT
-        current_environment = self.MOCAT.scenario_properties.x0          
+        current_environment = self.MOCAT.scenario_properties.x0
+
+        # Maneuvering costs
+        self.static_maneuver_prices = calibrate_static_maneuver_price(
+            current_environment=current_environment,
+            mocat=self.MOCAT,
+            multi_species=multi_species,
+            elliptical=self.elliptical,
+            target_annual_cost=self.target_annual_maneuver_cost
+        )          
 
         # Set up  parameters for ADR, set ADR times as every year after first year
         self.adr_params = ADRParameters(self.adr_params_json, mocat=self.MOCAT)
@@ -278,7 +288,7 @@ class OptimizeADR:
         ############################
         ### SOLVE FOR THE FIRST YEAR
         ############################c
-        open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, self.MOCAT.scenario_properties.x0, "linear", lam, multi_species, years, 0, fringe_start_slice, fringe_end_slice)
+        open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, self.MOCAT.scenario_properties.x0, "linear", lam, multi_species, years, 0, fringe_start_slice, fringe_end_slice, static_maneuver_prices=self.static_maneuver_prices)
 
         # This is now the first year estimate for the number of fringe satellites that should be launched.
         launch_rate = open_access.solver()
@@ -397,7 +407,7 @@ class OptimizeADR:
             start_time = time.time()
             # solver guess will be lam
             solver_guess = None
-            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice)
+            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice,static_maneuver_prices=self.static_maneuver_prices)
 
             # Calculate solver_guess
             solver_guess = lam.copy()
@@ -407,13 +417,17 @@ class OptimizeADR:
 
                 if species.maneuverable:
                     maneuvers = open_access.calculate_maneuvers(state_next_alt, species.name)
-                    # cost = species.econ_params.return_congestion_costs(state_next_alt, self.x0)
-                    cost = maneuvers * 10000 # $10,000 per maneuver
+                    
+                    # --- APPLYING STATIC MANEUVER COSTS ---
+                    cost_multiplier = self.static_maneuver_prices.get(species.name, 0.0)
+                    maneuver_cost = maneuvers * cost_multiplier
+                    
+                    
                     # Rate of Return
                     if self.elliptical:
-                        rate_of_return = open_access.fringe_rate_of_return(state_next_sma, collision_probability, species, cost)
+                        rate_of_return = open_access.fringe_rate_of_return(state_next_sma, collision_probability, species, maneuver_cost)
                     else:
-                        rate_of_return = open_access.fringe_rate_of_return(state_next_alt, collision_probability, species, cost)
+                        rate_of_return = open_access.fringe_rate_of_return(state_next_alt, collision_probability, species, maneuver_cost)
                 else:
                     if self.elliptical:
                         rate_of_return = open_access.fringe_rate_of_return(state_next_sma, collision_probability, species)
@@ -429,7 +443,7 @@ class OptimizeADR:
             # Check if there are any economic parameters that need to change (e.g demand growth of revenue)
             # multi_species.increase_demand()
 
-            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice)
+            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice, static_maneuver_prices=self.static_maneuver_prices)
 
             # Solve for equilibrium launch rates
             launch_rate = open_access.solver()
@@ -494,7 +508,7 @@ class OptimizeADR:
                     "excess_returns": open_access._last_excess_returns,
                     "non_compliance": open_access._last_non_compliance, 
                     "maneuvers": open_access._last_maneuvers,
-                    "cost": open_access._last_cost,
+                    "maneuver_cost": open_access._last_maneuver_cost,
                     "rate_of_return": open_access._last_rate_of_return,
                     "revenue_total": trial_total_revenue,
                     "revenue_by_shell": trial_revenue_by_shell,

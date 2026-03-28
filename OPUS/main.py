@@ -18,9 +18,10 @@ import pandas as pd
 
 from utils.ADRParameters import ADRParameters
 from utils.ADR import optimize_ADR_removal, implement_adr
-from utils.EconCalculations import EconCalculations
+from utils.EconCalculations import EconCalculations, revenue_open_access_calculations, calibrate_static_maneuver_price
 from utils.optimize_ADR import OptimizeADR
 from itertools import repeat
+
 
 from concurrent.futures import ProcessPoolExecutor
 
@@ -113,6 +114,7 @@ class IAMSolver:
         self.pmd_linked_species = None
         self.adr_params_json = None
         self.config = None
+        self.target_annual_maneuver_cost = 100000.0
 
     @staticmethod
     def get_species_position_indexes(MOCAT, constellation_sats):
@@ -233,6 +235,14 @@ class IAMSolver:
 
         current_environment = self.MOCAT.scenario_properties.x0
 
+        self.static_maneuver_prices = calibrate_static_maneuver_price(
+            current_environment=current_environment,
+            mocat=self.MOCAT,
+            multi_species=multi_species,
+            elliptical=self.elliptical,
+            target_annual_cost=self.target_annual_maneuver_cost
+        )
+
         # Solver guess is 5% of the current fringe satellites. This essentially helps the optimiser, as it is not a random guess to start with. 
         # Lam should be the same shape as x0 and is full of None values for objects that are not launched. 
         solver_guess = self.MOCAT.scenario_properties.x0.copy()
@@ -292,7 +302,7 @@ class IAMSolver:
         ############################
         ### SOLVE FOR THE FIRST YEAR 
         ############################
-        open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, self.MOCAT.scenario_properties.x0, "linear", lam, multi_species, years, 0, fringe_start_slice, fringe_end_slice)
+        open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, self.MOCAT.scenario_properties.x0, "linear", lam, multi_species, years, 0, fringe_start_slice, fringe_end_slice, static_maneuver_prices=self.static_maneuver_prices)
 
         # This is now the first year estimate for the number of fringe satellites that should be launched.
         # Solver returns a tuple of 5 variables
@@ -378,22 +388,27 @@ class IAMSolver:
             start_time = time.time()
             # solver guess will be lam
             solver_guess = None
-            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice)
+            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice, static_maneuver_prices=self.static_maneuver_prices)
 
             # Calculate solver_guess
             solver_guess = lam.copy()
+            
             for species in multi_species.species:
                 # Calculate the probability of collision based on the new position
                 collision_probability = open_access.calculate_probability_of_collision(state_next_alt, species.name)
 
                 if species.maneuverable:
                     maneuvers = open_access.calculate_maneuvers(state_next_alt, species.name)
-                    cost = maneuvers * 0 # $10,000 per maneuver (optional)
+                    
+                    # --- APPLYING STATIC MANEUVER COSTS ---
+                    cost_multiplier = self.static_maneuver_prices.get(species.name, 0.0)
+                    maneuver_cost = maneuvers * cost_multiplier
+                    
                     # Rate of Return
                     if self.elliptical:
-                        rate_of_return = open_access.fringe_rate_of_return(state_next_sma, collision_probability, species, cost)
+                        rate_of_return = open_access.fringe_rate_of_return(state_next_sma, collision_probability, species, maneuver_cost)
                     else:
-                        rate_of_return = open_access.fringe_rate_of_return(state_next_alt, collision_probability, species, cost)
+                        rate_of_return = open_access.fringe_rate_of_return(state_next_alt, collision_probability, species, maneuver_cost)
                 else:
                     if self.elliptical:
                         rate_of_return = open_access.fringe_rate_of_return(state_next_sma, collision_probability, species)
@@ -407,7 +422,7 @@ class IAMSolver:
 
             # store the rate of return for this species
             # Check if there are any economic parameters that need to change
-            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice)
+            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice, static_maneuver_prices=self.static_maneuver_prices)
 
             # Solve for equilibrium launch rates
             launch_rate = open_access.solver()
@@ -469,7 +484,7 @@ class IAMSolver:
                 "excess_returns": open_access._last_excess_returns,
                 "non_compliance": open_access._last_non_compliance, 
                 "maneuvers": open_access._last_maneuvers,
-                "cost of maneuvers": open_access._last_cost, 
+                "maneuver_cost": open_access._last_maneuver_cost,
                 "rate_of_return": open_access._last_rate_of_return,
                 "tax_revenue_total": total_tax_revenue_for_storage,
                 "tax_revenue_by_shell": shell_revenue,
@@ -665,14 +680,14 @@ if __name__ == "__main__":
 
     # Generate complete scenario names list
     scenario_files = [
-        "Baseline_1",
+        "Baseline",
     ]
     if baseline:
         scenario_files.append("Baseline")
     
     MOCAT_config = json.load(open("./OPUS/configuration/multi_single_species.json"))
 
-    simulation_name = "exogenous_impulse_10_shell_tol_1e-6_take2"
+    simulation_name = "maneuver_on_s_su_avg"
     if not os.path.exists(f"./Results/{simulation_name}"):
         os.makedirs(f"./Results/{simulation_name}")
 
@@ -692,10 +707,10 @@ if __name__ == "__main__":
 
         # Map the function over the arguments
         # process_scenario takes (scenario_name, MOCAT_config, simulation_name)
-        # results = list(executor.map(process_scenario, 
-        #                             scenario_files, 
-        #                             config_list, 
-        #                             sim_name_list))
+        results = list(executor.map(process_scenario, 
+                                    scenario_files, 
+                                    config_list, 
+                                    sim_name_list))
 
 
     """
