@@ -384,7 +384,10 @@ class IAMSolver:
             environment_before_adr = environment_for_solver.copy()
 
             if ((adr_params.adr_times is not None) and (time_idx in adr_params.adr_times) and (len(adr_params.adr_times) != 0)):
-                environment_for_solver, removal_dict = optimize_ADR_removal(environment_for_solver,self.MOCAT,adr_params)
+                if (adr_params.shell_order is not None) and (len(adr_params.shell_order != 0)):
+                    environment_for_solver, removal_dict = optimize_ADR_removal(environment_for_solver,self.MOCAT,adr_params)
+                else:
+                    environment_for_solver, num_removed = implement_adr(environment_for_solver,self.MOCAT,adr_params)
                 num_removed_this_period = int(np.sum(environment_before_adr - environment_for_solver))
 
             # Record propagated environment data 
@@ -584,8 +587,10 @@ def grid_setup(simulation_name, MOCAT_config, target_species, target_shell, amou
                                             name_base = f"bond_{int(bn)}_ouf_{int(fee)}"
                                         elif bn > 0:
                                             name_base = f"bond_{int(bn)}"
-                                        else:
+                                        elif fee > 0:
                                             name_base = f"ouf_{int(fee)}"
+                                        else:
+                                            name_base = f"exo"
                                         
                                         if len(target_shell) > 1:
                                             scenario_name = f"scenario_{name_base}_shell{shell}_{rule_suffix}"
@@ -696,11 +701,25 @@ if __name__ == "__main__":
     }
 
     # Generate complete scenario names list
-    # scenario_files = ["Baseline"]
+    # scenario_files = [
+    #     "Baseline_1",
+    #     "Shell_1",
+    #     "Shell_2",
+    #     "Shell_3",
+    #     "Shell_4",
+    #     "Shell_5",
+    #     "Shell_6",
+    #     "Shell_7",
+    #     "Shell_8",
+    #     "Shell_9",
+    #     "Shell_10",
+    # ]
+    # if baseline:
+    #     scenario_files.append("Baseline")
     
     MOCAT_config = json.load(open("./OPUS/configuration/testing_maneuvering.json"))
 
-    simulation_name = "e7_10_bond_0_M_off"
+    simulation_name = "opt_test"
     if not os.path.exists(f"./Results/{simulation_name}"):
         os.makedirs(f"./Results/{simulation_name}")
 
@@ -712,7 +731,7 @@ if __name__ == "__main__":
     # # Parallel Processing
     # print(f"Running {len(scenario_files)} scenarios in parallel...")
     
-    # with ProcessPoolExecutor() as executor:
+    # with ThreadPoolExecutor() as executor:
     #     n_scenarios = len(scenario_files)
         
     #     config_list = [MOCAT_config] * n_scenarios

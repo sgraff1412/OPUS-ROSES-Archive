@@ -40,7 +40,11 @@ class ADRParameters:
             # exogenous (=1) or endogenous (=0) ADR
             self.exogenous = params["exogenous"]
             # shell removal order/precedence (temporarily hard coded)
-            self.shell_order = [12, 14, 13, 15, 17, 11, 18, 16, 19, 20, 10, 9, 8, 5, 6, 7, 4, 3, 2, 1]
+            if "shell_order" in params:
+                self.shell_order = params["shell_order"]
+            # else:
+                # self.shell_order = [12, 14, 13, 15, 17, 11, 18, 16, 19, 20, 10, 9, 8, 5, 6, 7, 4, 3, 2, 1]
+                
         else:
             print("No ADR implemented. ")
             self.target_species = []

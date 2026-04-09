@@ -212,11 +212,11 @@ class OptimizeADR:
         # If parameters are found in the grid, apply them
             self.adr_params.target_species = [current_params[1]]
             self.adr_params.target_shell = [current_params[2]]
-            self.adr_params.shell_order = [12, 14, 13, 15, 17, 11, 18, 16, 19, 20, 10, 9, 8, 5, 6, 7, 4, 3, 2, 1]
-            if current_params[4] == 0:
-                self.adr_params.exogenous = 1
-            else:
+            self.adr_params.shell_order = [12, 14, 13, 15, 17, 11, 18, 16, 19, 20, 10, 9, 8, 5, 6, 7, 4, 3, 2, 1] # set as initial shell order; may update later
+            if (econ_params.bond is not None) and (econ_params.ouf != 0):
                 self.adr_params.exogenous = 0
+            else:
+                self.adr_params.exogenous = 1
             if current_params[3] > 1:
                 self.adr_params.n_remove = [current_params[3]] 
                 self.adr_params.remove_method = ["n"]
@@ -303,7 +303,7 @@ class OptimizeADR:
             print("Starting year ", time_idx)
         # tspan = np.linspace(tf[time_idx], tf[time_idx + 1], time_step) # simulate for one year 
         tspan = np.linspace(0, 1, 2)
-        
+        shell_welfare = []
         # Propagate the model and take the final state of the environment
         if self.elliptical:
             state_next_sma, state_next_alt = self.MOCAT.propagate(tspan, current_environment, lam, elliptical=self.elliptical, use_euler=True, step_size=0.01)
@@ -353,7 +353,7 @@ class OptimizeADR:
         for cs in shells:
             # reset environment and removals_left
             trial_environment_for_solver = before_adr.copy()
-            self.adr_params.removals_left = removals_possible
+            # self.adr_params.removals_left = removals_possible
             self.adr_params.target_shell = [cs]
 
             if ((self.adr_params.adr_times is not None) and (time_idx in self.adr_params.adr_times) and (len(self.adr_params.adr_times) != 0)):
@@ -500,7 +500,10 @@ class OptimizeADR:
                 best_welfare_so_far = welfare
                 opt_shell = cs
 
-        return current_trial_results, opt_shell, removal_dict
+            # save shell and their welfare in a tuple list of format [(shell_num, welfare),...]
+            shell_welfare.append((cs, welfare))
+
+        return current_trial_results, opt_shell, removal_dict, shell_welfare
 
     def run_optimizer_loop(self, scenario_name, simulation_name, MOCAT_config, params):
         """
@@ -512,7 +515,7 @@ class OptimizeADR:
         
         # run loop for each year
         for time_idx in tf:
-            optimization_trial_results, opt_shell, removal_dict = OptimizeADR.optimize_adr_loop(self, years=years, time_idx=time_idx, multi_species=multi_species, species_data=species_data, econ_calculator=econ_calculator, current_environment=current_environment, lam=lam, shells=shells, fringe_start_slice=fringe_start_slice, fringe_end_slice=fringe_end_slice)
+            optimization_trial_results, opt_shell, removal_dict, shell_welfare = OptimizeADR.optimize_adr_loop(self, years=years, time_idx=time_idx, multi_species=multi_species, species_data=species_data, econ_calculator=econ_calculator, current_environment=current_environment, lam=lam, shells=shells, fringe_start_slice=fringe_start_slice, fringe_end_slice=fringe_end_slice)
             
             if opt_shell is not None:
                 best_trial_results = optimization_trial_results[opt_shell]
@@ -523,42 +526,53 @@ class OptimizeADR:
                 lam = best_trial_results['lam']
 
                # Now we call process_period_economics to finalize the year's state and prepare the funds for the next period.
-            # We ignore the welfare returned here because it does not account for new launches (unlike best_trial_results)
-            _, _ = econ_calculator.process_period_economics(
-                num_actually_removed,
-                current_environment,
-                (fringe_start_slice, fringe_end_slice),
-                new_tax_revenue
-                    )
-            
-            # Save the results of the best trial
-            simulation_results[time_idx] = best_trial_results['simulation_data']
-            
-            # Retrieve the correct welfare (inclusive of new launches) from the simulation data
-            correct_welfare = best_trial_results['simulation_data']['welfare']
+                # We ignore the welfare returned here because it does not account for new launches (unlike best_trial_results)
+                _, _ = econ_calculator.process_period_economics(
+                    num_actually_removed,
+                    current_environment,
+                    (fringe_start_slice, fringe_end_slice),
+                    new_tax_revenue
+                        )
+                
+                # Save the results of the best trial
+                simulation_results[time_idx] = best_trial_results['simulation_data']
+                
+                # Retrieve the correct welfare (inclusive of new launches) from the simulation data
+                correct_welfare = best_trial_results['simulation_data']['welfare']
 
-            opt_path[str(time_idx)] = {
-                'Shell':int(opt_shell), 
-                'Num_Removed':int(num_actually_removed), 
-                'Welfare':int(correct_welfare), 
-                'Total_UMPY': int(np.sum(best_trial_results['simulation_data']['umpy']))
-            }
+                opt_path[str(time_idx)] = {
+                    'Shell':int(opt_shell), 
+                    'Num_Removed':int(num_actually_removed), 
+                    'Welfare':int(correct_welfare), 
+                    'Total_UMPY': int(np.sum(best_trial_results['simulation_data']['umpy']))
+                }
+                
+                # opt_path[str(time_idx)] = best_trial_results['removal_dict']
+                # Update the species data with the best trial's data
+                for i, sp in enumerate(self.MOCAT.scenario_properties.species_names):
+                    species_data[sp] = best_trial_results['species_data'][sp]
+                welfare = correct_welfare.copy()
+            else:
+                welfare, _ = econ_calculator.process_period_economics(
+                    num_actually_removed = 0,
+                    current_environment=self.environment_before_adr,
+                    fringe_slices = (fringe_start_slice, fringe_end_slice),
+                    new_tax_revenue = 0, # Corrected from new_t_revenue
+                )
+                pass
             
-            # opt_path[str(time_idx)] = best_trial_results['removal_dict']
-            # Update the species data with the best trial's data
-            for i, sp in enumerate(self.MOCAT.scenario_properties.species_names):
-                species_data[sp] = best_trial_results['species_data'][sp]
-        else:
-            welfare, _ = econ_calculator.process_period_economics(
-                num_actually_removed = 0,
-                current_environment=self.environment_before_adr,
-                fringe_slices = (fringe_start_slice, fringe_end_slice),
-                new_tax_revenue = 0, # Corrected from new_t_revenue
-            )
-            pass
+            # sorting shell_welfare list based on welfare
+            shell_welfare.sort(key=lambda x:x[1])
+            new_order = []
+            for pair in shell_welfare:
+                new_order.append(pair[0])
             
-        # sammie addition: storing the optimizable values and params
-        self.welfare_dict[scenario_name] = welfare
+            self.adr_params.shell_order = new_order       
+            print(f"New ADR Precedence Order: {new_order}")     
+            
+            # sammie addition: storing the optimizable values and params
+            self.welfare_dict[scenario_name] = welfare
+
         self.adr_dict[scenario_name] = int(np.sum(simulation_results[tf[-1]]['umpy']))
 
         removal_save_path = f"./Results/{simulation_name}/{scenario_name}/removal_path.json"
