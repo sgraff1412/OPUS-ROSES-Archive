@@ -731,7 +731,7 @@ if __name__ == "__main__":
     # # Parallel Processing
     # print(f"Running {len(scenario_files)} scenarios in parallel...")
     
-    # with ThreadPoolExecutor() as executor:
+    # with ProcessPoolExecutor() as executor:
     #     n_scenarios = len(scenario_files)
         
     #     config_list = [MOCAT_config] * n_scenarios
