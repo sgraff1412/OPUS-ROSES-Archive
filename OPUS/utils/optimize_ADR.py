@@ -73,7 +73,7 @@ class OptimizeADR:
             Sets up the initial environment. 
         """
         self.grid_search = grid_search
-        multi_species_names = ["S", "Su", "Sns"]
+        multi_species_names = ["S", "Su"]
         multi_species = MultiSpecies(multi_species_names)
 
         #########################
@@ -249,31 +249,6 @@ class OptimizeADR:
                 solver_guess[species.start_slice:species.end_slice] = inital_guess
                 lam[species.start_slice:species.end_slice] = solver_guess[species.start_slice:species.end_slice]
 
-        # Solver guess is 5% of the current fringe satellites. Update The launch file. This essentially helps the optimiser, as it is not a random guess to start with. 
-        # Lam should be the same shape as x0 and is full of None values for objects that are not launched. 
-        solver_guess = self.MOCAT.scenario_properties.x0.copy()
-        lam = np.full_like(self.MOCAT.scenario_properties.x0, None, dtype=object)
-        if self.elliptical:
-            for species in multi_species.species:
-                # lam will be n_sma_bins x n_ecc_bins x n_alt_shells
-                initial_guess = 0.05 * self.MOCAT.scenario_properties.x0[:, species.species_idx, 0]
-                # if sum of initial guess is 0, multiply each element by 10
-                if np.sum(initial_guess) == 0:
-                    initial_guess[:] = 5
-                lam[:, species.species_idx, 0] = initial_guess
-                solver_guess[:, species.species_idx, 0] = initial_guess
-        else:
-            for species in multi_species.species:
-                # if species.name == constellation_sat:
-                #     continue
-                # else:
-                inital_guess = 0.05 * np.array(self.MOCAT.scenario_properties.x0[species.start_slice:species.end_slice])  
-                # if sum of initial guess is 0, muliply each element by 10
-                if sum(inital_guess) == 0:
-                    inital_guess[:] = 5
-                solver_guess[species.start_slice:species.end_slice] = inital_guess
-                lam[species.start_slice:species.end_slice] = solver_guess[species.start_slice:species.end_slice]
-
         # solver_guess = self._apply_replacement_floor(solver_guess, self.MOCAT.scenario_properties.x0, multi_species)
         if self.elliptical:
             for species in multi_species.species:
@@ -406,7 +381,7 @@ class OptimizeADR:
             # Fringe Equilibrium Controller
             start_time = time.time()
             # solver guess will be lam
-            solver_guess = None
+            solver_guess = lam.copy()
             open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice,static_maneuver_prices=self.static_maneuver_prices)
 
             # Calculate solver_guess

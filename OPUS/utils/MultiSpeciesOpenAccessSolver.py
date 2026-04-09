@@ -255,9 +255,9 @@ class MultiSpeciesOpenAccessSolver:
         solver_options = {
             'method': 'dogbox',
             'verbose': 2,
-            'ftol': 1e-3,
-            'xtol': 1e-3,
-            'gtol': 1e-3,
+            'ftol': 1e-7,
+            'xtol': 1e-7,
+            'gtol': 1e-7,
             'max_nfev': 1000
         }
 
