@@ -348,6 +348,7 @@ class OptimizeADR:
         before_adr = environment_for_solver.copy()
         self.environment_before_adr = before_adr.copy()
         scenario_name = self.scenario_name
+        lam_before_adr = lam.copy()
 
         # run loop for each shell in the model
         for cs in shells:
@@ -381,11 +382,11 @@ class OptimizeADR:
             # Fringe Equilibrium Controller
             start_time = time.time()
             # solver guess will be lam
-            solver_guess = lam.copy()
+            solver_guess = lam_before_adr.copy()
             open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice,static_maneuver_prices=self.static_maneuver_prices)
 
             # Calculate solver_guess
-            solver_guess = lam.copy()
+            solver_guess = lam_before_adr.copy()
             for species in multi_species.species:
                 # Calculate the probability of collision based on the new position
                 collision_probability = open_access.calculate_probability_of_collision(state_next_alt, species.name)
