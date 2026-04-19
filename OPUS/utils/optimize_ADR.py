@@ -440,7 +440,9 @@ class OptimizeADR:
             trial_total_revenue = float(open_access._last_total_revenue)
             trial_revenue_by_shell = open_access._last_tax_revenue.tolist()
             trial_species_data = species_data
-            trial_launch_rate = launch_rate.copy()
+            trial_launch_rate_by_species = {}
+            for sp in multi_species.species:
+                trial_launch_rate_by_species[sp.name] = launch_rate[sp.start_slice:sp.end_slice].tolist()
             trial_lam = lam.copy()
 
             """NEED TO FIX THE WELFARE CALCULATIONS HERE"""
@@ -448,7 +450,7 @@ class OptimizeADR:
             fringe_pop = trial_environment_for_solver[fringe_start_slice:fringe_end_slice]
             total_fringe_sat = np.sum(fringe_pop)
             #Added in new launches
-            new_launches_sum = np.sum(trial_launch_rate[fringe_start_slice:fringe_end_slice])
+            new_launches_sum = np.sum(launch_rate[fringe_start_slice:fringe_end_slice])
             welfare = 0.5 * self.econ_params.coef * (total_fringe_sat + new_launches_sum) ** 2 + trial_leftover_tax_revenue
 
         # --- NEW CALCULATION: Probability Adjusted OUF ---
@@ -469,7 +471,7 @@ class OptimizeADR:
                 "environment": trial_environment_for_solver.copy(),
                 "num_removed": trial_num_removed,
                 "new_total_revenue": trial_total_revenue,
-                "launch_rate": trial_launch_rate,
+                "launch_rate": trial_launch_rate_by_species,
                 "lam": trial_lam,
                 "removal_dict": removal_dict,
                 "species_data": trial_species_data,
@@ -478,7 +480,7 @@ class OptimizeADR:
                 "simulation_data": {
                     "ror": rate_of_return,
                     "collision_probability": collision_probability,
-                    "launch_rate" : launch_rate, 
+                    "launch_rate" : trial_launch_rate_by_species, 
                     "collision_probability_all_species": open_access._last_collision_probability,
                     "umpy": open_access.umpy, 
                     "excess_returns": open_access._last_excess_returns,

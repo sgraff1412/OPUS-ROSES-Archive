@@ -506,8 +506,7 @@ class PlotHandler:
                 fig, axes = plt.subplots(
                         nrows=num_rows,
                         ncols=num_cols,
-                        figsize=(12, 6 * num_rows),
-                        sharex=True
+                        figsize=(12, 6 * num_rows)
                 )
 
                 # Flatten axes for easy iteration (in case num_rows > 1)
@@ -536,7 +535,8 @@ class PlotHandler:
                         #         ax.set_title(f"Total Count across all shells: {species}")
                         ax.set_xlabel("Time (Years)")
                         ax.set_ylabel("Total Count")
-                        ax.legend()
+                        if idx % 2 != 0:
+                                ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
                         ax.grid(True)
 
                 # Hide any leftover empty subplots (if #species < num_rows * num_cols)
@@ -1576,8 +1576,257 @@ class PlotHandler:
                 plt.close()
                 
                 print(f"Comparison total objects over time plot saved to {file_path}")
+        
+        def comparison_total_launch_rate_evolution(self, plot_data_lists, other_data_lists):
+                comparison_folder = os.path.join(self.simulation_folder, "comparisons")
+                os.makedirs(comparison_folder, exist_ok=True)
+
+                launch_mat = {}
+                labels = []
+                # Loop over each scenario's data
+                for i, (plot_data, other_data) in enumerate(zip(plot_data_lists, other_data_lists)):
+                        # --- Calculate final UMPY value ---
+                        scenario_label = getattr(plot_data, "scenario", f"Scenario {i+1}")
+                        labels.append(scenario_label)
+
+                        timesteps = sorted(other_data.keys(), key=int)
+                        last_timestep = timesteps[-1]
+                        # Sum the "umpy" list at the final timestep
+                        total_launches = {}
+                        total_launches['S'] = []
+                        total_launches['Su'] = []
+                        for j in timesteps:
+                                num_species = 0
+                                for sp in other_data[j]["launch_rate"].items():
+                                        num_species = num_species + 1
+                                        # print(f'{sp}')
+                                        launch_nums = np.array([])
+                                        for nIdx, num in enumerate(sp[1]):
+                                                launch_nums = np.append(launch_nums,num)
+                                        
+                                        total_launches[sp[0]].append(np.sum(launch_nums))
+                                        
+                                        
+                        launch_mat[scenario_label] = total_launches
+                        
+                
+                # num_species = len(other_data_lists[0][1]["launch_rate"])
+
+                # --- Create scatter plot ---
+                num_cols = 2
+                num_rows = math.ceil(num_species / num_cols)
 
 
+                fig, axes = plt.subplots(
+                        nrows=num_rows,
+                        ncols=num_cols,
+                        figsize=(12, 6 * num_rows)
+                )
+
+                # Flatten axes for easy iteration (in case num_rows > 1)
+                axes = np.array(axes).flatten()
+
+                # Plot each species in its own subplot
+                for idx, (scenario_name, scenario_data) in enumerate(launch_mat.items()):
+                        
+                        # scenario_data looks like {scenario_name: np.array([...])}
+                        for i, (species_name, launch_totals) in enumerate(scenario_data.items()):
+                                ax = axes[i]
+                                # ax.plot(range(len(counts)), counts, label=scenario_name, marker='o')
+                                launches = launch_totals[1:]
+                                x_axis = range(1,len(launches)+1)
+                                if idx <= 9:
+                                        ax.plot(x_axis, launches, label=scenario_name, marker='o')
+                                elif (idx > 9) and (idx <= 19):
+                                        ax.plot(x_axis, launches, label=scenario_name, marker='X')
+                                elif (idx > 19) and (idx <= 29):
+                                        ax.plot(x_axis, launches, label=scenario_name, marker='>')
+                                else:
+                                        ax.plot(x_axis, launches, label=scenario_name, marker='*')
+                                ax.set_title(f"Total Launches across all shells: {species_name}")
+                                ax.grid(True)
+                        # if idx == 0:  # First plot
+                        #         ax.set_title("LEO Species Total")
+                        # else:
+                        #         ax.set_title(f"Total Count across all shells: {species}")
+                                ax.set_xlabel("Time (Years)")
+                                ax.set_ylabel("Total Launches")
+                        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+                # # Hide any leftover empty subplots (if #species < num_rows * num_cols)
+                # for extra_ax in axes[num_species]:
+                #         extra_ax.set_visible(False)
+
+                plt.tight_layout()
+
+                # Save the figure
+                out_path = os.path.join(comparison_folder, "comparison_total_launches.png")
+                plt.savefig(out_path, dpi=300)
+                plt.close()
+
+                print(f"Comparison plot saved to {out_path}")
+
+        def comparison_relative_launch_rate_evolution(self, plot_data_lists, other_data_lists):
+                comparison_folder = os.path.join(self.simulation_folder, "comparisons")
+                os.makedirs(comparison_folder, exist_ok=True)
+
+                launch_mat = {}
+                labels = []
+                # Loop over each scenario's data
+                for i, (plot_data, other_data) in enumerate(zip(plot_data_lists, other_data_lists)):
+                        # --- Calculate final UMPY value ---
+                        scenario_label = getattr(plot_data, "scenario", f"Scenario {i+1}")
+                        labels.append(scenario_label)
+
+                        timesteps = sorted(other_data.keys(), key=int)
+                        last_timestep = timesteps[-1]
+                        # Sum the "umpy" list at the final timestep
+                        total_launches = {}
+                        total_launches['S'] = []
+                        total_launches['Su'] = []
+                        for j in timesteps:
+                                num_species = 0
+                                for sp in other_data[j]["launch_rate"].items():
+                                        num_species = num_species + 1
+                                        # print(f'{sp}')
+                                        launch_nums = np.array([])
+                                        for nIdx, num in enumerate(sp[1]):
+                                                launch_nums = np.append(launch_nums,num)
+                                        
+                                        total_launches[sp[0]].append(np.sum(launch_nums))
+                                        
+                                        
+                        launch_mat[scenario_label] = total_launches
+                        
+                
+                # num_species = len(other_data_lists[0][1]["launch_rate"])
+
+                # --- Create scatter plot ---
+                num_cols = 2
+                num_rows = math.ceil(num_species / num_cols)
+
+
+                fig, axes = plt.subplots(
+                        nrows=num_rows,
+                        ncols=num_cols,
+                        figsize=(12, 6 * num_rows)
+                )
+
+                # Flatten axes for easy iteration (in case num_rows > 1)
+                axes = np.array(axes).flatten()
+
+                # Plot each species in its own subplot
+                for idx, (scenario_name, scenario_data) in enumerate(launch_mat.items()):
+                        
+                        # scenario_data looks like {scenario_name: np.array([...])}
+                        for i, (species_name, launch_totals) in enumerate(scenario_data.items()):
+                                ax = axes[i]
+                                # ax.plot(range(len(counts)), counts, label=scenario_name, marker='o')
+                                baseline_data = launch_mat['Baseline'][species_name]
+                                baseline_counts = np.array([])
+                                for num in baseline_data:
+                                        baseline_counts = np.append(baseline_counts, num)
+                                test = np.array(launch_totals) - np.array(baseline_data)
+                                launches = np.array(launch_totals) - np.array(baseline_counts)
+                                x_axis = range(1,len(launches)+1)
+                                if (scenario_name != 'Baseline') and (idx <= 9):
+                                        ax.plot(x_axis, launches, label=scenario_name, marker='o')
+                                elif (scenario_name != 'Baseline') and (idx > 9) and (idx <= 19):
+                                        ax.plot(x_axis, launches, label=scenario_name, marker='X')
+                                elif (scenario_name != 'Baseline') and (idx > 19) and (idx <= 29):
+                                        ax.plot(x_axis, launches, label=scenario_name, marker='>')
+                                elif (scenario_name != 'Baseline'):
+                                        ax.plot(x_axis, launches, label=scenario_name, marker='*')
+                                ax.set_title(f"Total Launches across all shells: {species_name}")
+                                ax.grid(True)
+                        # if idx == 0:  # First plot
+                        #         ax.set_title("LEO Species Total")
+                        # else:
+                        #         ax.set_title(f"Total Count across all shells: {species}")
+                                ax.set_xlabel("Time (Years)")
+                                ax.set_ylabel("Total Launches")
+                        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+                # # Hide any leftover empty subplots (if #species < num_rows * num_cols)
+                # for extra_ax in axes[num_species]:
+                #         extra_ax.set_visible(False)
+
+                plt.tight_layout()
+
+                # Save the figure
+                out_path = os.path.join(comparison_folder, "comparison_relative_total_launches.png")
+                plt.savefig(out_path, dpi=300)
+                plt.close()
+
+                print(f"Comparison plot saved to {out_path}")
+
+        def combined_launches_by_shell(self, plot_data, other_data):
+                
+                scenario_label = getattr(plot_data, "scenario", f"Scenario {1}")
+                # Loop over each scenario's data
+                
+                        # --- Calculate final UMPY value ---
+                        
+
+                timesteps = sorted(other_data.keys(), key=int)
+                last_timestep = timesteps[-1]
+                # Sum the "umpy" list at the final timestep
+                launch_mat = {}
+                launch_mat['S'] = {}
+                launch_mat['Su'] = {}
+                for shellNum in range(1, self.n_shells+1):
+                        launch_mat['Su'][f"Shell {shellNum}"] = np.array([])
+                        launch_mat['S'][f"Shell {shellNum}"] = np.array([])
+                for j in timesteps:
+                        num_species = 0
+                        for sp in other_data[j]["launch_rate"].items():
+                                num_species = num_species + 1
+                                launch_nums = np.array([])
+                                
+                                for nIdx, num in enumerate(sp[1]):
+                                        launch_mat[sp[0]][f"Shell {nIdx+1}"] = np.append(launch_mat[sp[0]][f"Shell {nIdx+1}"], num)
+                                        launch_nums = np.append(launch_nums,num)
+                                
+                                # launch_mat[sp[0]].append(launch_nums)
+                                        
+                                        
+
+                # Calculate number of rows and columns for the subplot grid
+                cols = int(np.ceil(np.sqrt(num_species)))
+                rows = int(np.ceil(num_species / cols))
+
+                # Create the figure
+                fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 6), constrained_layout=True)
+
+                # Flatten axes for easy iteration (handles edge cases where rows * cols > num_species)
+                axes = axes.flatten() if num_species > 1 else [axes]
+
+                for ax, (sp, data) in zip(axes, launch_mat.items()):
+                        # im = ax.imshow(data.T, aspect='auto', cmap='viridis', origin='lower')
+                        x_axis = range(1, len(timesteps)+1)
+                        for idx, (shell_num, launches) in enumerate(data.items()):
+                                if (idx <= 9):
+                                        ax.plot(x_axis, launches, label=shell_num, marker='o')
+                                elif (idx > 9) and (idx <= 19):
+                                        ax.plot(x_axis, launches, label=shell_num, marker='X')
+                                elif (idx > 19) and (idx <= 29):
+                                        ax.plot(x_axis, launches, label=shell_num, marker='>')
+                                else:
+                                        ax.plot(x_axis, launches, label=shell_num, marker='*')
+                        ax.grid(True)
+                        ax.set_title(f'Species {sp}')
+                        ax.set_xlabel('Year')
+                        ax.set_ylabel('Number of Launches')
+                ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+                # # Turn off unused subplots
+                # for ax in axes[len(species_data):]:
+                #         ax.axis('off')
+
+                # Save the combined plot
+                combined_file_path = os.path.join(plot_data.path, "combined_launches_by_shell.png")
+                plt.savefig(combined_file_path, dpi=300, bbox_inches='tight')
+                plt.close()
         ## These plots dont work
         # def ror_cp_and_launch_rate(self, plot_data, other_data):
         #         """
@@ -2585,8 +2834,7 @@ class PlotHandler:
                 fig, axes = plt.subplots(
                         nrows=num_rows,
                         ncols=num_cols,
-                        figsize=(12, 6 * num_rows),
-                        sharex=True
+                        figsize=(12, 6 * num_rows)
                 )
 
                 # Flatten axes for easy iteration (in case num_rows > 1)
@@ -2616,7 +2864,8 @@ class PlotHandler:
                         #         ax.set_title(f"Relative count across all shells: {species}")
                         ax.set_xlabel("Time (Years)")
                         ax.set_ylabel("Species Count")
-                        ax.legend()
+                        if idx % 2 != 0:
+                                ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
                         ax.grid(True)
 
                 # Hide any leftover empty subplots (if #species < num_rows * num_cols)

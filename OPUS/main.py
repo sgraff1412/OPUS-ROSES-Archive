@@ -701,25 +701,25 @@ if __name__ == "__main__":
     }
 
     # Generate complete scenario names list
-    # scenario_files = [
-    #     "Baseline_1",
-    #     "Shell_1",
-    #     "Shell_2",
-    #     "Shell_3",
-    #     "Shell_4",
-    #     "Shell_5",
-    #     "Shell_6",
-    #     "Shell_7",
-    #     "Shell_8",
-    #     "Shell_9",
-    #     "Shell_10",
-    # ]
-    # if baseline:
-    #     scenario_files.append("Baseline")
+    scenario_files = [
+        # "Baseline_1",
+        # "Shell_1",
+        # "Shell_2",
+        # "Shell_3",
+        # "Shell_4",
+        # "Shell_5",
+        # "Shell_6",
+        # "Shell_7",
+        # "Shell_8",
+        # "Shell_9",
+        # "Shell_10",
+    ]
+    if baseline:
+        scenario_files.append("Baseline")
     
-    MOCAT_config = json.load(open("./OPUS/configuration/testing_maneuvering.json"))
+    MOCAT_config = json.load(open("./OPUS/configuration/10_shell_200_to_1200.json"))
 
-    simulation_name = "opt_test"
+    simulation_name = "debug_main_run_iterated_lam_5"
     if not os.path.exists(f"./Results/{simulation_name}"):
         os.makedirs(f"./Results/{simulation_name}")
 
@@ -749,20 +749,20 @@ if __name__ == "__main__":
         Running Greedy Optimization:
         Uncomment the lines below, configure the parameters to suit your needs, then hit run as normal.
     """
-    optimization_solver = OptimizeADR()
+    # optimization_solver = OptimizeADR()
 
-    ts = ["N_700kg"] # target species
-    # tp = np.linspace(0, 0.5, num=2)
-    tn = [1000] # target number of removals each year
-    tax = [0] #[0,.1,.2,.3,.4,.5,.6,.7,.8,.9,1,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2]
-    bond = [0] #, 100000, 200000] #[0,100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000]*1
-    ouf = [0]*1
-    target_shell = [12] # last number should be the number of shells + 1
-    rc = [5000000] # could also switch to range(x,y) similar to target_shell
-    disposal_times = [5]
+    # ts = ["N_700kg"] # target species
+    # # tp = np.linspace(0, 0.5, num=2)
+    # tn = [1000] # target number of removals each year
+    # tax = [0] #[0,.1,.2,.3,.4,.5,.6,.7,.8,.9,1,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2]
+    # bond = [0] #, 100000, 200000] #[0,100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000]*1
+    # ouf = [0]*1
+    # target_shell = [12] # last number should be the number of shells + 1
+    # rc = [5000000] # could also switch to range(x,y) similar to target_shell
+    # disposal_times = [5]
 
-    # running the "grid_setup" function for "optimization" based on lower welfare values
-    MOCAT, scenario_files, best_umpy = grid_setup(simulation_name=simulation_name, MOCAT_config=MOCAT_config, target_species=ts, target_shell=target_shell, amount_remove=tn, removal_cost=rc, tax_rate=tax, bond=bond, ouf=ouf, disposal_times=disposal_times)
+    # # running the "grid_setup" function for "optimization" based on lower welfare values
+    # MOCAT, scenario_files, best_umpy = grid_setup(simulation_name=simulation_name, MOCAT_config=MOCAT_config, target_species=ts, target_shell=target_shell, amount_remove=tn, removal_cost=rc, tax_rate=tax, bond=bond, ouf=ouf, disposal_times=disposal_times)
 
 
     # # if you just want to plot the results - and not re- run the simulation. You just need to pass an instance of the MOCAT model that you created. 
