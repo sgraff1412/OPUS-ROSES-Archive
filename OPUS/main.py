@@ -708,7 +708,7 @@ if __name__ == "__main__":
         # "Shell_3",
         # "Shell_4",
         # "Shell_5",
-        # "Shell_6",
+        "Shell_6",
         # "Shell_7",
         # "Shell_8",
         # "Shell_9",
@@ -717,7 +717,7 @@ if __name__ == "__main__":
     if baseline:
         scenario_files.append("Baseline")
     
-    MOCAT_config = json.load(open("./OPUS/configuration/10_shell_200_to_1200.json"))
+    MOCAT_config = json.load(open("./OPUS/configuration/10_shell_300_to_1100.json"))
 
     simulation_name = "debug_main_run_iterated_lam_5"
     if not os.path.exists(f"./Results/{simulation_name}"):
