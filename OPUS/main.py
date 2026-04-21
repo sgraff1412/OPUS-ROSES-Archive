@@ -773,7 +773,7 @@ if __name__ == "__main__":
 
     MOCAT_config = json.load(open("./OPUS/configuration/testing_maneuvering.json"))
 
-    simulation_name = "10_shell_200_to_1500_trf"
+    simulation_name = "10_shell_300_to_1100_trf"
     if not os.path.exists(f"./Results/{simulation_name}"):
         os.makedirs(f"./Results/{simulation_name}")
 
@@ -793,17 +793,17 @@ if __name__ == "__main__":
 
     ts = ["N_700kg"] # target species
     # tp = np.linspace(0, 0.5, num=2)
-    tn = [1000] # target number of removals each year
+    tn = [0] # target number of removals each year
     tax = [0] #[0,.1,.2,.3,.4,.5,.6,.7,.8,.9,1,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2]
-    bond = [500000] #, 100000, 200000] #[0,100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000]*1
+    bond = [500000,1000000] #, 100000, 200000] #[0,100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000]*1
     ouf = [0]*1
-    target_shell = [12] # last number should be the number of shells + 1
+    target_shell = [11] # last number should be the number of shells + 1
     rc = [5000000] # could also switch to range(x,y) similar to target_shell
     disposal_times = [5]
     # Target annual per-satellite maneuver cost ($). Sweep over values to 
     # study how maneuver expense affects launch behavior and ADR outcomes.
     # Default [100000] preserves previous behavior.
-    maneuver_cost = [25000, 100000]  # e.g. [50000, 100000, 200000, 500000]
+    maneuver_cost = [100000]  # e.g. [50000, 100000, 200000, 500000]
 
     # running the "grid_setup" function for "optimization" based on lower welfare values
     MOCAT, scenario_files, best_umpy = grid_setup(simulation_name=simulation_name, MOCAT_config=MOCAT_config, target_species=ts, target_shell=target_shell, amount_remove=tn, removal_cost=rc, tax_rate=tax, bond=bond, ouf=ouf, disposal_times=disposal_times, maneuver_cost=maneuver_cost)

@@ -181,8 +181,8 @@ class PlotHandler:
                                 if scenario == "Baseline":
                                         timesteps = sorted(other_data.keys(), key=int)
                                         self.baseline_launches = {}
-                                        self.baseline_launches['S'] = np.empty([self.n_shells, len(timesteps)])
-                                        self.baseline_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                                        self.baseline_launches['S'] = np.empty([len(timesteps), self.n_shells])
+                                        self.baseline_launches['Su'] = np.empty([len(timesteps), self.n_shells])
                                         for t, j in enumerate(timesteps):
                                                 num_species = 0
                                                 for sp in other_data[j]["launch_rate"].items():
@@ -1855,8 +1855,8 @@ class PlotHandler:
                 
                 # Sum the "umpy" list at the final timestep
                 total_launches = {}
-                total_launches['S'] = np.empty([self.n_shells, len(timesteps)])
-                total_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                total_launches['S'] = np.empty([len(timesteps), self.n_shells])
+                total_launches['Su'] = np.empty([len(timesteps), self.n_shells])
                 for t, j in enumerate(timesteps):
                         num_species = 0
                         for sp in other_data[j]["launch_rate"].items():
@@ -1867,8 +1867,8 @@ class PlotHandler:
                 
                 if scenario_label == "Baseline":
                         self.baseline_launches = {}
-                        self.baseline_launches['S'] = np.empty([self.n_shells, len(timesteps)])
-                        self.baseline_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                        self.baseline_launches['S'] = np.empty([len(timesteps), self.n_shells])
+                        self.baseline_launches['Su'] = np.empty([len(timesteps), self.n_shells])
                         for t, j in enumerate(timesteps):
                                 num_species = 0
                                 for sp in other_data[j]["launch_rate"].items():
@@ -1948,8 +1948,8 @@ class PlotHandler:
                                 
                                 # Sum the "umpy" list at the final timestep
                                 self.baseline_launches = {}
-                                self.baseline_launches['S'] = np.empty([self.n_shells, len(timesteps)])
-                                self.baseline_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                                self.baseline_launches['S'] = np.empty([len(timesteps), self.n_shells])
+                                self.baseline_launches['Su'] = np.empty([len(timesteps), self.n_shells])
                                 for t, j in enumerate(timesteps):
                                         num_species = 0
                                         for sp in other_data[j]["launch_rate"].items():
@@ -1965,8 +1965,8 @@ class PlotHandler:
                                 
                                 # Sum the "umpy" list at the final timestep
                                 total_launches = {}
-                                total_launches['S'] = np.empty([self.n_shells, len(timesteps)])
-                                total_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                                total_launches['S'] = np.empty([len(timesteps), self.n_shells])
+                                total_launches['Su'] = np.empty([len(timesteps), self.n_shells])
                                 for t, j in enumerate(timesteps):
                                         num_species = 0
                                         for sp in other_data[j]["launch_rate"].items():
