@@ -178,6 +178,19 @@ class PlotHandler:
                                 #                         plot_method()
                                 #                 else:
                                 #                         print(f"Warning: Plot '{plot_name}' not found. Skipping...")
+                                if scenario == "Baseline":
+                                        timesteps = sorted(other_data.keys(), key=int)
+                                        self.baseline_launches = {}
+                                        self.baseline_launches['S'] = np.empty([self.n_shells, len(timesteps)])
+                                        self.baseline_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                                        for t, j in enumerate(timesteps):
+                                                num_species = 0
+                                                for sp in other_data[j]["launch_rate"].items():
+                                                        num_species = num_species + 1
+                                                        # print(f'{sp}')
+                                                        for nIdx, num in enumerate(sp[1]):
+                                                                self.baseline_launches[sp[0]][t][nIdx] = num
+
                         if "all_plots" in self.plot_types:
                                 self.all_plots(plot_data, other_data, econ_data)
                 if comparison:
@@ -1827,6 +1840,197 @@ class PlotHandler:
                 combined_file_path = os.path.join(plot_data.path, "combined_launches_by_shell.png")
                 plt.savefig(combined_file_path, dpi=300, bbox_inches='tight')
                 plt.close()
+
+        def combined_launches_heatmap(self, plot_data, other_data):
+                
+                scenario_label = getattr(plot_data, "scenario", f"Scenario {1}")
+                # Loop over each scenario's data
+                
+                        # --- Calculate final UMPY value ---
+                        
+
+                timesteps = sorted(other_data.keys(), key=int)
+                last_timestep = timesteps[-1]
+                # Sum the "umpy" list at the final timestep
+                
+                # Sum the "umpy" list at the final timestep
+                total_launches = {}
+                total_launches['S'] = np.empty([self.n_shells, len(timesteps)])
+                total_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                for t, j in enumerate(timesteps):
+                        num_species = 0
+                        for sp in other_data[j]["launch_rate"].items():
+                                num_species = num_species + 1
+                                # print(f'{sp}')
+                                for nIdx, num in enumerate(sp[1]):
+                                        total_launches[sp[0]][t][nIdx] = num
+                
+                if scenario_label == "Baseline":
+                        self.baseline_launches = {}
+                        self.baseline_launches['S'] = np.empty([self.n_shells, len(timesteps)])
+                        self.baseline_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                        for t, j in enumerate(timesteps):
+                                num_species = 0
+                                for sp in other_data[j]["launch_rate"].items():
+                                        num_species = num_species + 1
+                                        # print(f'{sp}')
+                                        for nIdx, num in enumerate(sp[1]):
+                                                self.baseline_launches[sp[0]][t][nIdx] = num
+                        # launch_mat[sp[0]].append(launch_nums)
+                                
+                                        
+
+                # Calculate number of rows and columns for the subplot grid
+                cols = int(np.ceil(np.sqrt(num_species)))
+                rows = int(np.ceil(num_species / cols))
+
+                # Create the figure
+                fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 6), constrained_layout=True)
+
+                # Flatten axes for easy iteration (handles edge cases where rows * cols > num_species)
+                axes = axes.flatten() if num_species > 1 else [axes]
+
+                for ax, (sp, data) in zip(axes, total_launches.items()):
+                        # hm_data = np.empty(len(timesteps))
+                        # for idx, num in enumerate(data):
+                        #         hm_data[idx] = num
+                        hm_data = data
+                        
+                        im = ax.imshow(hm_data.T, aspect='auto', cmap='viridis', origin='lower')
+                        ax.set_title(f'Species {sp}')
+                        ax.set_xlabel('Year')
+                        ax.set_ylabel('Shell Mid Altitude (km)')
+                        ax.set_xticks(range(data.shape[0]))
+                        ax.set_xticklabels(range(1, data.shape[0]+1))
+                        ax.set_yticks(range(data.shape[1]))
+                        # Ensure the number of labels matches the number of ticks
+                        l = len(self.HMid)
+                        sh = data.shape[1]
+                        if len(self.HMid) == data.shape[1]:
+                            ax.set_yticklabels(self.HMid)
+                        else:
+                            # If HMid length doesn't match, use a subset or create appropriate labels
+                            if len(self.HMid) < data.shape[1]:
+                                # Pad with additional values or use the available ones
+                                labels = list(self.HMid) + [f"Shell {i}" for i in range(len(self.HMid), data.shape[1])]
+                                ax.set_yticklabels(labels[:data.shape[1]])
+                            else:
+                                # Use only the first data.shape[1] elements
+                                ax.set_yticklabels(self.HMid[:data.shape[1]])
+                        fig.colorbar(im, ax=ax, orientation='vertical', fraction=0.046, pad=0.04)
+                        # im = ax.imshow(data.T, aspect='auto', cmap='viridis', origin='lower')
+                        # ax.grid(True)
+                        # ax.set_title(f'Species {sp}')
+                        # ax.set_xlabel('Year')
+                        # ax.set_ylabel('Number of Launches')
+
+                # # Turn off unused subplots
+                # for ax in axes[len(species_data):]:
+                #         ax.axis('off')
+
+                # Save the combined plot
+                combined_file_path = os.path.join(plot_data.path, "combined_launches_heatmap.png")
+                plt.savefig(combined_file_path, dpi=300, bbox_inches='tight')
+                plt.close()
+
+        def comparison_relative_launches_heatmap(self, plot_data_lists, other_data_lists):
+                for i, (plot_data, other_data) in enumerate(zip(plot_data_lists, other_data_lists)):
+                        scenario_name = getattr(plot_data, "scenario", f"Scenario {1}")
+                        if scenario_name == "Baseline":
+                                # Loop over each scenario's data
+                                
+                                        # --- Calculate final UMPY value ---
+                                        
+
+                                timesteps = sorted(other_data.keys(), key=int)
+                                last_timestep = timesteps[-1]
+                                # Sum the "umpy" list at the final timestep
+                                
+                                # Sum the "umpy" list at the final timestep
+                                self.baseline_launches = {}
+                                self.baseline_launches['S'] = np.empty([self.n_shells, len(timesteps)])
+                                self.baseline_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                                for t, j in enumerate(timesteps):
+                                        num_species = 0
+                                        for sp in other_data[j]["launch_rate"].items():
+                                                num_species = num_species + 1
+                                                # print(f'{sp}')
+                                                for nIdx, num in enumerate(sp[1]):
+                                                        self.baseline_launches[sp[0]][t][nIdx] = num 
+
+                        else:
+                                timesteps = sorted(other_data.keys(), key=int)
+                                last_timestep = timesteps[-1]
+                                # Sum the "umpy" list at the final timestep
+                                
+                                # Sum the "umpy" list at the final timestep
+                                total_launches = {}
+                                total_launches['S'] = np.empty([self.n_shells, len(timesteps)])
+                                total_launches['Su'] = np.empty([self.n_shells, len(timesteps)])
+                                for t, j in enumerate(timesteps):
+                                        num_species = 0
+                                        for sp in other_data[j]["launch_rate"].items():
+                                                num_species = num_species + 1
+                                                # print(f'{sp}')
+                                                for nIdx, num in enumerate(sp[1]):
+                                                        total_launches[sp[0]][t][nIdx] = num - self.baseline_launches[sp[0]][t][nIdx]
+                                                
+                                        # launch_mat[sp[0]].append(launch_nums)
+
+                                                        
+
+                                # Calculate number of rows and columns for the subplot grid
+                                cols = int(np.ceil(np.sqrt(num_species)))
+                                rows = int(np.ceil(num_species / cols))
+
+                                # Create the figure
+                                fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 6), constrained_layout=True)
+
+                                # Flatten axes for easy iteration (handles edge cases where rows * cols > num_species)
+                                axes = axes.flatten() if num_species > 1 else [axes]
+
+                                for ax, (sp, data) in zip(axes, total_launches.items()):
+                                        # hm_data = np.empty(len(timesteps))
+                                        # for idx, num in enumerate(data):
+                                        #         hm_data[idx] = num
+                                        hm_data = data
+                                        
+                                        im = ax.imshow(hm_data.T, aspect='auto', cmap='viridis', origin='lower')
+                                        ax.set_title(f'Species {sp}')
+                                        ax.set_xlabel('Year')
+                                        ax.set_ylabel('Shell Mid Altitude (km)')
+                                        ax.set_xticks(range(data.shape[0]))
+                                        ax.set_xticklabels(range(1, data.shape[0]+1))
+                                        ax.set_yticks(range(data.shape[1]))
+                                        # Ensure the number of labels matches the number of ticks
+                                        l = len(self.HMid)
+                                        sh = data.shape[1]
+                                        if len(self.HMid) == data.shape[1]:
+                                                ax.set_yticklabels(self.HMid)
+                                        else:
+                                        # If HMid length doesn't match, use a subset or create appropriate labels
+                                                if len(self.HMid) < data.shape[1]:
+                                                        # Pad with additional values or use the available ones
+                                                        labels = list(self.HMid) + [f"Shell {i}" for i in range(len(self.HMid), data.shape[1])]
+                                                        ax.set_yticklabels(labels[:data.shape[1]])
+                                                else:
+                                                        # Use only the first data.shape[1] elements
+                                                        ax.set_yticklabels(self.HMid[:data.shape[1]])
+                                        fig.colorbar(im, ax=ax, orientation='vertical', fraction=0.046, pad=0.04)
+                                        # im = ax.imshow(data.T, aspect='auto', cmap='viridis', origin='lower')
+                                        # ax.grid(True)
+                                        # ax.set_title(f'Species {sp}')
+                                        # ax.set_xlabel('Year')
+                                        # ax.set_ylabel('Number of Launches')
+
+                                # # Turn off unused subplots
+                                # for ax in axes[len(species_data):]:
+                                #         ax.axis('off')
+
+                                # Save the combined plot
+                                combined_file_path = os.path.join(plot_data.path, "combined_relative_launches_heatmap.png")
+                                plt.savefig(combined_file_path, dpi=300, bbox_inches='tight')
+                                plt.close()                
         ## These plots dont work
         # def ror_cp_and_launch_rate(self, plot_data, other_data):
         #         """
