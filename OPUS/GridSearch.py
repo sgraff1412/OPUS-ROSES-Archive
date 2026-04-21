@@ -28,8 +28,8 @@ N_INITIAL_POINTS = 10
 RANDOM_STATE     = 42
 SHOW_SURFACE     = True
 
-TARGET_COUNTS = {"S": 7677, "Su": 2665, "Sns": 1228}
-# TARGET_COUNTS = {"SA": 3070, "SB": 3070, "SC": 1537, "SuA": 1075, "SuB": 1075, "SuC": 540}
+TARGET_COUNTS = {"S": 7677, "Su": 2665}
+TARGET_ANNUAL_MANEUVER_COST = 100_000.0   # maneuvering costs ON
 
 # ───────────────────────────────────────────────────
 # 1.  HELPER ROUTINES
@@ -56,7 +56,7 @@ def get_total_species_from_output(species_data):
 def run_simulation(intercepts):
     if not hasattr(run_simulation, "_baseline"):
         # UPDATE THIS PATH IF NEEDED
-        with open("./OPUS/configuration/multi_single_species.json") as f:
+        with open("./OPUS/configuration/testing_maneuvering.json") as f:
             run_simulation._baseline = json.load(f)
 
     config = deepcopy(run_simulation._baseline)
@@ -72,6 +72,7 @@ def run_simulation(intercepts):
             spec["OPUS"]["coefficient"] = coeff
 
     iam_solver   = IAMSolver()
+    iam_solver.target_annual_maneuver_cost = TARGET_ANNUAL_MANEUVER_COST
     sim_name     = "RevenueInterceptSearch"
     scenario     = "Baseline"
 
@@ -88,7 +89,7 @@ def compute_cost(result):
 
 # --- helper ----------------------------------------------------------
 def sim_counts(R_vec):
-    names = ["S", "Su", "Sns"]
+    names = ["S", "Su"]
     result = run_simulation(dict(zip(names, R_vec)))
     return np.array([result[n] for n in names])
 
@@ -119,13 +120,13 @@ def jacobian(R_base, delta=30_000):
 # MAIN ROUTINE WITH CHECKPOINTING
 # ───────────────────────────────────────────────────
 if __name__ == "__main__":
-    TARGET = np.array([7677, 2665, 1228])
+    TARGET = np.array([7677, 2665])
     N_PASSES      = 4
     DELTA         = 30_000
 
     # STARTING GUESS
     # R = np.array([1665764, 2205401, 55701], dtype=float)
-    R = np.array([1665764, 2205401, 55701], dtype=float)
+    R = np.array([1665764, 2205401], dtype=float)
 
     # Variables for Broyden history
     J      = None  
@@ -149,7 +150,7 @@ if __name__ == "__main__":
             # Use the verification result from the end of the last loop
             N0 = N1 
             
-        cost = compute_cost(dict(zip(["S","Su","Sns"], N0)))
+        cost = compute_cost(dict(zip(["S","Su"], N0)))
         print(f"  Current Counts: {np.round(N0).astype(int)} Cost: {cost:,.0f}")
 
         if cost < 1e5:
@@ -171,7 +172,7 @@ if __name__ == "__main__":
         if it == 0:
             print("  > Calculating FULL Jacobian (Running parallel workers)...")
             perturbations = []
-            for j in range(3):
+            for j in range(2):
                 R_pert = R.copy()
                 R_pert[j] += DELTA
                 perturbations.append(R_pert)
@@ -179,7 +180,7 @@ if __name__ == "__main__":
             with ProcessPoolExecutor() as executor:
                 results = list(executor.map(sim_counts, perturbations))
             
-            J = np.zeros((3, 3))
+            J = np.zeros((2, 2))
             for j, Nj in enumerate(results):
                 J[:, j] = (Nj - N0) / DELTA
             print("  > Full Jacobian calculated.")
@@ -225,7 +226,7 @@ if __name__ == "__main__":
         # -----------------------------------------------------------
         print("  > Verifying new position...")
         N1 = sim_counts(R) # This becomes N0 in the next loop
-        new_cost = compute_cost(dict(zip(["S","Su","Sns"], N1)))
+        new_cost = compute_cost(dict(zip(["S","Su"], N1)))
         
         elapsed = (time.time() - start_time) / 3600
         print(f"  Pass Complete in {elapsed:.2f} hours. New Cost: {new_cost:,.0f}")

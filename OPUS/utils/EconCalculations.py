@@ -6,16 +6,31 @@ class EconCalculations:
     
     This class holds the state of economic variables that persist between time periods.
     """
-    def __init__(self, econ_params, initial_removal_cost=5000000.0):
+    def __init__(self, econ_params, initial_removal_cost=5000000.0, welfare_coef=None,
+                 welfare_species=None):
         """
         Initializes the economic calculator.
         
         Args:
-            econ_params: An object containing economic parameters, like the welfare coefficient.
+            econ_params: An object containing economic parameters. Used only for removal_cost
+                and as a fallback source of `coef` if welfare_coef is not provided.
             initial_removal_cost (float): The cost to remove one piece of debris.
+            welfare_coef (float): Fallback welfare coefficient used in single-species
+                welfare mode. Kept for backward compatibility. Ignored if
+                welfare_species is provided.
+            welfare_species (list of (name, start_slice, end_slice, coef) tuples):
+                Per-species entries to include in the welfare calculation. Each
+                species contributes 0.5 * coef * S_species^2 to consumer surplus,
+                summed across species. When provided, this takes precedence over
+                welfare_coef. Typical usage: include both S and Su since both are
+                endogenous launch species under the updated paper.
         """
         # --- Parameters ---
-        self.welfare_coef = econ_params.coef
+        self.welfare_species = welfare_species
+        if welfare_coef is not None:
+            self.welfare_coef = welfare_coef
+        else:
+            self.welfare_coef = econ_params.coef
         self.removal_cost = initial_removal_cost
 
         # --- State Variable ---
@@ -56,8 +71,19 @@ class EconCalculations:
         # The welfare bonus is based on the unspent funds from the available budget.
         welfare_revenue_component = max(0, funds_left_before_new_revenue)
         
-        total_fringe_sat = np.sum(current_environment[fringe_start_slice:fringe_end_slice])
-        welfare = 0.5 * self.welfare_coef * total_fringe_sat**2 + welfare_revenue_component
+        # Consumer surplus summed across all endogenous species that carry their
+        # own demand curve. Falls back to single-species (fringe-only) mode if 
+        # welfare_species wasn't provided at construction.
+        if self.welfare_species:
+            consumer_surplus = 0.0
+            for (_name, start, end, coef) in self.welfare_species:
+                sp_pop = np.sum(current_environment[start:end])
+                consumer_surplus += 0.5 * coef * sp_pop ** 2
+        else:
+            total_fringe_sat = np.sum(current_environment[fringe_start_slice:fringe_end_slice])
+            consumer_surplus = 0.5 * self.welfare_coef * total_fringe_sat ** 2
+
+        welfare = consumer_surplus + welfare_revenue_component
         
         # 3. Update the state for the NEXT period.
         # The new pool of funds is the leftover amount plus the newly collected tax revenue.
@@ -66,56 +92,104 @@ class EconCalculations:
         return welfare, funds_left_before_new_revenue
     
 def revenue_open_access_calculations(open_access_inputs, state_next):
-    
-    # Find the fringe ('Su') species' economic parameters from the solver object
-    fringe_econ_params = None
+    """
+    Compute policy revenue aggregated across all active (launching) species.
+
+    Per the updated paper, tax/bond/OUF apply to all active satellite species
+    that participate in the open-access launch equilibrium, not only the
+    fringe (Su). Revenue is summed over species so that each satellite in
+    orbit, regardless of species, contributes to the funding pool for ADR.
+
+    The revenue TYPE (bond vs OUF vs tax) is chosen once, based on what policy
+    is active. If more than one is active, priority is bond > OUF > tax (only
+    the highest-priority active policy contributes). This matches the previous
+    per-species logic and reflects that the three instruments are alternatives,
+    not additive. The per-species parameter values are taken from each
+    species' own econ_params, so it is possible (though not typical) for
+    species to carry different bond/tax/OUF values; the same policy "type"
+    is applied to all of them.
+    """
+    # Only these species participate in open-access launches and thus in the
+    # revenue pool. Extend this list if more species become endogenous.
+    ACTIVE_SPECIES = ('S', 'Su')
+
+    cp_dict = open_access_inputs._last_collision_probability or {}
+    n_shells = open_access_inputs.MOCAT.scenario_properties.n_shells
+
+    # Determine policy type from any active species' econ_params. All active
+    # species share the same policy flags in the current grid setup (policy
+    # values are assigned uniformly in optimize_ADR.solve_year_zero), so any
+    # species' econ_params is a valid source; prefer Su for backward
+    # compatibility with scenarios that only set it on Su.
+    policy_reference = None
     for sp in open_access_inputs.multi_species.species:
-        if sp.name == 'Su':
-            fringe_econ_params = sp.econ_params
-            break
-    
-    if fringe_econ_params is None:
-        raise ValueError("Could not find 'Su' species econ_params in revenue_open_access_calculations")
+        if sp.name in ACTIVE_SPECIES:
+            if sp.name == 'Su' or policy_reference is None:
+                policy_reference = sp.econ_params
+                if sp.name == 'Su':
+                    break
 
-    collision_probability = open_access_inputs._last_collision_probability
+    if policy_reference is None:
+        raise ValueError(
+            "No active species (S or Su) found in revenue_open_access_calculations"
+        )
 
-    fringe_total = state_next[open_access_inputs.fringe_start_slice:open_access_inputs.fringe_end_slice]
+    # Initialize aggregate revenue and per-species bond revenue (needed by
+    # downstream consumers that expect a dict of bond revenue).
+    revenue_by_shell_total = np.zeros(n_shells)
+    bond_revenue_by_shell = np.zeros(n_shells)
 
-    # Use fringe_econ_params instead of open_access_inputs.econ_params
-    if (fringe_econ_params.bond is not None) and (fringe_econ_params.bond != 0):
-        # Calculate revenue ONLY from sats at end-of-life
-        sats_at_eol = fringe_total / fringe_econ_params.sat_lifetime
-        
-        # Calculate bond revenue: (non-compliance rate) * (sats at EOL) * (bond value)
-        revenue_by_shell = (1 - fringe_econ_params.comp_rate) * sats_at_eol * fringe_econ_params.bond
-        # Set the attribute on the solver object instead of reading it
-        open_access_inputs.bond_revenue = revenue_by_shell                # bond
-        open_access_inputs._revenue_type = "bond"
+    # Select policy type once, then iterate over species. Priority: bond > OUF > tax.
+    bond_active = (policy_reference.bond is not None) and (policy_reference.bond != 0)
+    ouf_active  = getattr(policy_reference, 'ouf', 0) != 0
+    tax_active  = policy_reference.tax != 0
 
-    # Use fringe_econ_params
-    elif getattr(fringe_econ_params, "ouf", 0) != 0:
-        revenue_by_shell = fringe_econ_params.ouf * fringe_total *collision_probability    # OUF
-        open_access_inputs._revenue_type = "ouf"
+    if bond_active:
+        revenue_type = "bond"
+    elif ouf_active:
+        revenue_type = "ouf"
+    elif tax_active:
+        revenue_type = "tax"
+    else:
+        revenue_type = "none"
 
-    # Use fringe_econ_params
-    elif fringe_econ_params.tax != 0: #tax
-        Cp            = collision_probability
-        cost_per_sat  = np.asarray(fringe_econ_params.cost)
-        revenue_by_shell = fringe_econ_params.tax * Cp * cost_per_sat * fringe_total
-        open_access_inputs._revenue_type = "tax"
+    for sp in open_access_inputs.multi_species.species:
+        if sp.name not in ACTIVE_SPECIES:
+            continue
 
-    else:  # nothing levied
-        revenue_by_shell = np.zeros_like(fringe_total)
-        open_access_inputs._revenue_type = "none"
+        sp_ep = sp.econ_params
+        sp_pop = state_next[sp.start_slice:sp.end_slice]
+        sp_cp = cp_dict.get(sp.name, np.zeros_like(sp_pop))
 
-    total_revenue = revenue_by_shell.sum()
+        if revenue_type == "bond" and (sp_ep.bond is not None) and (sp_ep.bond != 0):
+            sats_at_eol = sp_pop / sp_ep.sat_lifetime
+            sp_revenue = (1 - sp_ep.comp_rate) * sats_at_eol * sp_ep.bond
+            bond_revenue_by_shell += sp_revenue
+            revenue_by_shell_total += sp_revenue
 
-    _last_tax_revenue   = revenue_by_shell
+        elif revenue_type == "ouf" and getattr(sp_ep, 'ouf', 0) != 0:
+            sp_revenue = sp_ep.ouf * sp_pop * sp_cp
+            revenue_by_shell_total += sp_revenue
+
+        elif revenue_type == "tax" and sp_ep.tax != 0:
+            cost_per_sat = np.asarray(sp_ep.cost)
+            sp_revenue = sp_ep.tax * sp_cp * cost_per_sat * sp_pop
+            revenue_by_shell_total += sp_revenue
+        # else: this species isn't carrying this policy, contributes 0
+
+    open_access_inputs.bond_revenue = bond_revenue_by_shell
+    open_access_inputs._revenue_type = revenue_type
+
+    total_revenue = revenue_by_shell_total.sum()
+
+    _last_tax_revenue   = revenue_by_shell_total
     _last_total_revenue = float(total_revenue)
-    _dbg_tax_rate       = fringe_econ_params.tax
-    _dbg_Cp             = collision_probability  
-    _dbg_cost_per_sat   = np.asarray(fringe_econ_params.cost)
-    _dbg_fringe_total   = fringe_total
+    # Keep the debug returns the same shape as before so callers don't break.
+    # Reference values are from the policy_reference species (usually Su).
+    _dbg_tax_rate       = policy_reference.tax
+    _dbg_Cp             = cp_dict.get('Su', np.zeros(n_shells))
+    _dbg_cost_per_sat   = np.asarray(policy_reference.cost)
+    _dbg_fringe_total   = state_next[open_access_inputs.fringe_start_slice:open_access_inputs.fringe_end_slice]
 
     return _last_tax_revenue, _last_total_revenue, _dbg_tax_rate, _dbg_Cp, _dbg_cost_per_sat, _dbg_fringe_total
 

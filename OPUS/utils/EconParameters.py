@@ -74,10 +74,15 @@ class EconParameters:
         shell_marginal_residence_times = np.zeros(self.mocat.scenario_properties.n_shells)
         self.shell_cumulative_residence_times = np.zeros(self.mocat.scenario_properties.n_shells)
 
-        # Here using the ballastic coefficient of the species, we are trying to find the highest compliant altitude/shell
+        # Here using the ballastic coefficient of the species, we are trying to find the highest compliant altitude/shell.
+        # Ballistic coefficient β = Cd * A / m. Uses the same Cd and area that the drag
+        # delta-v calculation uses below (Cd=2.2, A=1.741 m²), but scales by the species
+        # mass so that k_star differs between species that have different masses.
+        # Previously this was hardcoded to 0.0172 regardless of species, which gave the
+        # same k_star for everyone.
+        beta = 2.2 * 1.741 / self.mass
         for k in range(self.mocat.scenario_properties.n_shells):
             rhok = densityexp(self.mocat.scenario_properties.R0_km[k])
-            beta = 0.0172 # ballastic coefficient, area * mass * drag coefficient. 
             rvel_current_D = -rhok * beta * np.sqrt(self.mocat.scenario_properties.mu * self.mocat.scenario_properties.R0[k]) * (24 * 3600 * 365.25)
             shell_marginal_decay_rates[k] = -rvel_current_D/self.mocat.scenario_properties.Dhl
             shell_marginal_residence_times[k] = 1/shell_marginal_decay_rates[k]

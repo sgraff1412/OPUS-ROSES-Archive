@@ -22,6 +22,26 @@ from utils.EconCalculations import EconCalculations, calibrate_static_maneuver_p
 from itertools import repeat
 
 
+# Species that participate in consumer-surplus aggregation. Per the updated
+# paper, both S (constellation) and Su (fringe) are endogenous launch species,
+# so both contribute to welfare. If more species become endogenous later,
+# extend this set.
+WELFARE_ACTIVE_SPECIES = ('S', 'Su')
+
+
+def _build_welfare_species(multi_species):
+    """
+    Build the welfare_species list consumed by EconCalculations from the 
+    multi_species container. Each entry is (name, start_slice, end_slice, coef)
+    where coef is pulled from the species' own econ_params.
+    """
+    entries = []
+    for sp in multi_species.species:
+        if sp.name in WELFARE_ACTIVE_SPECIES:
+            entries.append((sp.name, sp.start_slice, sp.end_slice, sp.econ_params.coef))
+    return entries
+
+
 
 
 
@@ -150,6 +170,11 @@ class OptimizeADR:
             if len(current_params) > 10:
                 econ_params.disposal_time = float(current_params[10])
 
+            # Pick up maneuver cost from params grid if provided (index 11).
+            # This overrides the default self.target_annual_maneuver_cost (100000)
+            # and is used later in calibrate_static_maneuver_price.
+            if len(current_params) > 11 and current_params[11] is not None:
+                self.target_annual_maneuver_cost = float(current_params[11])
 
             for species in multi_species.species:
                 species.econ_params.ouf = getattr(econ_params, 'ouf', 0.0)
@@ -161,19 +186,26 @@ class OptimizeADR:
                     
                 species.econ_params.calculate_cost_fn_parameters(species.Pm, scenario_name) 
             self.econ_params = econ_params
-            econ_calculator = EconCalculations(self.econ_params, initial_removal_cost=5000000)
+            # Welfare sums consumer surplus across all endogenous species (both S and Su).
+            # Each species contributes 0.5 * coef * S_species^2 where coef is that species'
+            # demand coefficient and S_species is its per-period population.
+            welfare_species_list = _build_welfare_species(multi_species)
+            econ_calculator = EconCalculations(self.econ_params, initial_removal_cost=5000000,
+                                                welfare_species=welfare_species_list)
 
             # econ_params.calculate_cost_fn_parameters()
             # sammie / joey: i think we need the above line to run this but i'm not sure what the inputs would be
         else:
             self.econ_params = EconParameters(self.econ_params_json, mocat=self.MOCAT)
             self.econ_params.econ_params_for_ADR(scenario_name)
-            econ_calculator = EconCalculations(self.econ_params, initial_removal_cost=5000000)
             # For each simulation - we will need to modify the base economic parameters for the species. 
             for species in multi_species.species:
                 species.econ_params.modify_params_for_simulation(scenario_name)
                 species.econ_params.calculate_cost_fn_parameters(species.Pm, scenario_name)            
-            # species.econ_params.update_congestion_costs(multi_species, self.MOCAT.scenario_properties.x0) 
+            # species.econ_params.update_congestion_costs(multi_species, self.MOCAT.scenario_properties.x0)
+            welfare_species_list = _build_welfare_species(multi_species)
+            econ_calculator = EconCalculations(self.econ_params, initial_removal_cost=5000000,
+                                                welfare_species=welfare_species_list)
 
         # For now make all satellites circular if elliptical
         if self.elliptical:
@@ -213,7 +245,16 @@ class OptimizeADR:
             self.adr_params.target_species = [current_params[1]]
             self.adr_params.target_shell = [current_params[2]]
             self.adr_params.shell_order = [12, 14, 13, 15, 17, 11, 18, 16, 19, 20, 10, 9, 8, 5, 6, 7, 4, 3, 2, 1] # set as initial shell order; may update later
-            if (econ_params.bond is not None) and (econ_params.ouf != 0):
+            # ADR is endogenous if ANY revenue-raising policy is active:
+            # tax, bond, or OUF. Exogenous means no policy-driven funding
+            # (ADR funded externally with hardcoded 10 removals/year as a stand-in).
+            # Previously this required BOTH bond AND ouf simultaneously, which 
+            # disabled endogenous mode for tax-only, bond-only, and OUF-only 
+            # scenarios.
+            tax_active  = (econ_params.tax is not None) and (econ_params.tax != 0)
+            bond_active = (econ_params.bond is not None) and (econ_params.bond != 0)
+            ouf_active  = (econ_params.ouf is not None) and (econ_params.ouf != 0)
+            if tax_active or bond_active or ouf_active:
                 self.adr_params.exogenous = 0
             else:
                 self.adr_params.exogenous = 1
@@ -336,11 +377,18 @@ class OptimizeADR:
         # determine removals possible based on cost of removal and money available
         removals_possible = econ_calculator.get_removals_for_current_period()
         # save removals left based on whether ADR is exogenous or endogenous
+        # Policy activity is checked cleanly: bond=None or 0 both count as inactive.
+        tax_active  = (self.econ_params.tax is not None) and (self.econ_params.tax != 0)
+        bond_active = (self.econ_params.bond is not None) and (self.econ_params.bond != 0)
+        ouf_active  = (self.econ_params.ouf is not None) and (self.econ_params.ouf != 0)
+
         if self.adr_params.exogenous == 1:
             self.adr_params.removals_left = 10
-        elif (self.econ_params.tax == 0 and self.econ_params.bond == 0 and self.econ_params.ouf == 0) or (self.econ_params.bond == None and self.econ_params.tax == 0 and self.econ_params.ouf == 0):
-            self.adr_params.removals_left = 0 # This is a hard-coded override, kept as-is.
+        elif not (tax_active or bond_active or ouf_active):
+            # No policy active and not exogenous — no funding, no removals.
+            self.adr_params.removals_left = 0
         else:
+            # Endogenous mode with at least one active policy; use the funds pool.
             self.adr_params.removals_left = removals_possible
         self.adr_params.time = time_idx
         
@@ -350,8 +398,19 @@ class OptimizeADR:
         scenario_name = self.scenario_name
         lam_before_adr = lam.copy()
 
+        # If this is a Baseline scenario (no ADR target species, or zero amount to 
+        # remove), looping over every shell is wasteful because each trial produces 
+        # identical results — optimize_ADR_removal is a no-op and the solver sees 
+        # the same input every time. Run a single trial in that case.
+        target_species_list = self.adr_params.target_species or []
+        is_baseline_scenario = (
+            len(target_species_list) == 0
+            or (len(target_species_list) == 1 and target_species_list[0] == "none")
+        )
+        shells_to_iterate = [shells[0]] if is_baseline_scenario else shells
+
         # run loop for each shell in the model
-        for cs in shells:
+        for cs in shells_to_iterate:
             # reset environment and removals_left
             trial_environment_for_solver = before_adr.copy()
             # self.adr_params.removals_left = removals_possible
@@ -445,13 +504,18 @@ class OptimizeADR:
                 trial_launch_rate_by_species[sp.name] = launch_rate[sp.start_slice:sp.end_slice].tolist()
             trial_lam = lam.copy()
 
-            """NEED TO FIX THE WELFARE CALCULATIONS HERE"""
-            #J- Adding in Economic Welfare
-            fringe_pop = trial_environment_for_solver[fringe_start_slice:fringe_end_slice]
-            total_fringe_sat = np.sum(fringe_pop)
-            #Added in new launches
-            new_launches_sum = np.sum(launch_rate[fringe_start_slice:fringe_end_slice])
-            welfare = 0.5 * self.econ_params.coef * (total_fringe_sat + new_launches_sum) ** 2 + trial_leftover_tax_revenue
+            # Welfare: sum of consumer surplus across all endogenous species 
+            # (both S and Su contribute per the updated paper), plus any leftover
+            # policy revenue that wasn't spent on ADR this period.
+            # Uses pre-ADR population plus new launches as the per-period stock.
+            consumer_surplus = 0.0
+            for sp in multi_species.species:
+                if sp.name not in WELFARE_ACTIVE_SPECIES:
+                    continue
+                sp_pop = np.sum(trial_environment_for_solver[sp.start_slice:sp.end_slice])
+                sp_new = np.sum(launch_rate[sp.start_slice:sp.end_slice])
+                consumer_surplus += 0.5 * sp.econ_params.coef * (sp_pop + sp_new) ** 2
+            welfare = consumer_surplus + trial_leftover_tax_revenue
 
         # --- NEW CALCULATION: Probability Adjusted OUF ---
             su_species = next((s for s in multi_species.species if s.name == 'Su'), None)

@@ -210,7 +210,6 @@ class IAMSolver:
         
         econ_params_gen = EconParameters(self.econ_params_json, mocat=self.MOCAT)
         econ_params_gen.econ_params_for_ADR(scenario_name)
-        econ_calculator = EconCalculations(econ_params_gen, initial_removal_cost=5000000)
 
         # For each simulation - modify params (Tax/Bond) but DO NOT overwrite Intercept
         for species in multi_species.species:
@@ -226,6 +225,15 @@ class IAMSolver:
         # Also normalise on econ_params_gen so the ADR budget check is consistent
         if econ_params_gen.bond == 0:
             econ_params_gen.bond = None
+
+        # Welfare sums consumer surplus across all endogenous species (both S and Su).
+        welfare_species_list = [
+            (sp.name, sp.start_slice, sp.end_slice, sp.econ_params.coef)
+            for sp in multi_species.species
+            if sp.name in ('S', 'Su')
+        ]
+        econ_calculator = EconCalculations(econ_params_gen, initial_removal_cost=5000000,
+                                            welfare_species=welfare_species_list)
 
         # Make all satellites circular if elliptical
         if self.elliptical:
@@ -372,10 +380,14 @@ class IAMSolver:
             environment_for_solver = state_next_sma if self.elliptical else state_next_alt
 
             # # ----- ADR Section ---- # #
+            # Policy activity check: bond=None or 0 both count as inactive.
+            tax_active  = (econ_params_gen.tax is not None) and (econ_params_gen.tax != 0)
+            bond_active = (econ_params_gen.bond is not None) and (econ_params_gen.bond != 0)
+            ouf_active  = (econ_params_gen.ouf is not None) and (econ_params_gen.ouf != 0)
+
             if adr_params.exogenous == 1:
                 adr_params.removals_left = 10
-            elif (econ_params_gen.tax == 0 and econ_params_gen.ouf == 0 and
-                  (econ_params_gen.bond is None or econ_params_gen.bond == 0)):
+            elif not (tax_active or bond_active or ouf_active):
                 adr_params.removals_left = 0
             else:
                 adr_params.removals_left = econ_calculator.get_removals_for_current_period()
@@ -463,11 +475,17 @@ class IAMSolver:
                 new_tax_revenue=new_total_tax_revenue
             )
 
-            # Welfare: matches optimize_ADR.py — includes new launches in fringe population
-            fringe_pop = environment_for_solver[fringe_start_slice:fringe_end_slice]
-            total_fringe_sat = np.sum(fringe_pop)
-            new_launches_sum = np.sum(launch_rate[fringe_start_slice:fringe_end_slice])
-            welfare = 0.5 * econ_params_gen.coef * (total_fringe_sat + new_launches_sum) ** 2 + max(0, leftover_revenue)
+            # Welfare: sum of consumer surplus across both S and Su species,
+            # plus any leftover policy revenue. Each species contributes
+            # 0.5 * coef * (current_pop + new_launches)^2 using its own demand coef.
+            consumer_surplus = 0.0
+            for sp in multi_species.species:
+                if sp.name not in ('S', 'Su'):
+                    continue
+                sp_pop = np.sum(environment_for_solver[sp.start_slice:sp.end_slice])
+                sp_new = np.sum(launch_rate[sp.start_slice:sp.end_slice])
+                consumer_surplus += 0.5 * sp.econ_params.coef * (sp_pop + sp_new) ** 2
+            welfare = consumer_surplus + max(0, leftover_revenue)
 
             # Read revenues for storage
             shell_revenue = open_access._last_tax_revenue.tolist()
@@ -551,24 +569,53 @@ def process_optimizer_scenario_ADR(scenario_name, MOCAT_config, simulation_name,
     iam_solver_optimize.run_optimizer_loop(scenario_name, simulation_name, MOCAT_config, params)
     return None, iam_solver_optimize.adr_dict, iam_solver_optimize.welfare_dict
 
-def grid_setup(simulation_name, MOCAT_config, target_species, target_shell, amount_remove, removal_cost, tax_rate, bond, ouf, disposal_times):
+def grid_setup(simulation_name, MOCAT_config, target_species, target_shell, amount_remove, removal_cost, tax_rate, bond, ouf, disposal_times, maneuver_cost=None):
         """
-        Setting up grid for greedy optimization with defined params
+        Setting up grid for greedy optimization with defined params.
+
+        maneuver_cost: list of target annual maneuver costs to sweep over.
+            Each value is the target per-satellite annual maneuver budget that
+            calibrate_static_maneuver_price() uses to set the price per maneuver.
+            If None, defaults to [100000] (the previous hardcoded value).
+
+        One Baseline row is created per maneuver_cost value so that each ADR 
+        scenario is compared against a same-maneuver-cost baseline. When only 
+        one maneuver cost is used, this reduces to a single "Baseline" row 
+        (same as before).
         """
-        # Calculate array size based on all combinations + 1 for Baseline
-        num_scenarios = (len(target_species) * len(target_shell) * len(amount_remove) * len(removal_cost) * len(tax_rate) * len(bond) * len(ouf) * len(disposal_times)) + 1
+        if maneuver_cost is None:
+            maneuver_cost = [100000]
+
+        n_baselines = len(maneuver_cost)
+
+        # Calculate array size based on all combinations + one Baseline per maneuver_cost
+        num_scenarios = (len(target_species) * len(target_shell) * len(amount_remove) * len(removal_cost) * len(tax_rate) * len(bond) * len(ouf) * len(disposal_times) * len(maneuver_cost)) + n_baselines
         
         params = [None] * num_scenarios
-        scenario_files = ["Baseline"]
+        scenario_files = []
+        baseline_names = []  # one per maneuver_cost, indexed same order as maneuver_cost list
         
-        counter = 1
+        counter = 0
         save_path = f"./Results/{simulation_name}/comparisons/umpy_opt_grid.json"
         adr_dict = {}
         welfare_dict = {}
         best_umpy = None
 
-        # Setup Baseline Parameters (Index 10 is disposal time, defaulting to 5 if not set)
-        params[0] = ["Baseline", "none", 1, 0, 5000000, 0, 0, 0, [], [], 5]
+        # Setup Baseline Parameters — one per maneuver_cost value.
+        # Row layout (index: field):
+        #   0: scenario_name, 1: species, 2: shell, 3: amount_removed,
+        #   4: removal_cost, 5: tax, 6: bond, 7: ouf,
+        #   8: umpy (filled post-run), 9: welfare (filled post-run),
+        #   10: disposal_time, 11: maneuver_cost
+        for mc in maneuver_cost:
+            if len(maneuver_cost) > 1:
+                baseline_name = f"Baseline_mc{int(mc)}"
+            else:
+                baseline_name = "Baseline"
+            baseline_names.append(baseline_name)
+            scenario_files.append(baseline_name)
+            params[counter] = [baseline_name, "none", 1, 0, 5000000, 0, 0, 0, [], [], 5, mc]
+            counter = counter + 1
         
         # Loop through all parameters
         for i, sp in enumerate(target_species):
@@ -579,28 +626,33 @@ def grid_setup(simulation_name, MOCAT_config, target_species, target_shell, amou
                             for kk, bn in enumerate(bond):
                                 for fee in ouf:
                                     for dt in disposal_times:
-                                    
-                                        # Naming Logic using the loop variable 'dt'
-                                        rule_suffix = f"{dt}_year"
-                                        
-                                        if bn > 0 and fee > 0:
-                                            name_base = f"bond_{int(bn)}_ouf_{int(fee)}"
-                                        elif bn > 0:
-                                            name_base = f"bond_{int(bn)}"
-                                        elif fee > 0:
-                                            name_base = f"ouf_{int(fee)}"
-                                        else:
-                                            name_base = f"exo"
-                                        
-                                        if len(target_shell) > 1:
-                                            scenario_name = f"scenario_{name_base}_shell{shell}_{rule_suffix}"
-                                        else:
-                                            scenario_name = f"scenario_{name_base}_{rule_suffix}"
+                                        for mc in maneuver_cost:
 
-                                        scenario_files.append(scenario_name)
-                                        
-                                        params[counter] = [scenario_name, sp, shell, am, rc, tax, bn, fee, [], [], dt]
-                                        counter = counter + 1
+                                            # Naming Logic using the loop variable 'dt'
+                                            rule_suffix = f"{dt}_year"
+
+                                            if bn > 0 and fee > 0:
+                                                name_base = f"bond_{int(bn)}_ouf_{int(fee)}"
+                                            elif bn > 0:
+                                                name_base = f"bond_{int(bn)}"
+                                            elif fee > 0:
+                                                name_base = f"ouf_{int(fee)}"
+                                            else:
+                                                name_base = f"exo"
+
+                                            # Append maneuver cost to scenario name when it's being swept
+                                            if len(maneuver_cost) > 1:
+                                                name_base = f"{name_base}_mc{int(mc)}"
+
+                                            if len(target_shell) > 1:
+                                                scenario_name = f"scenario_{name_base}_shell{shell}_{rule_suffix}"
+                                            else:
+                                                scenario_name = f"scenario_{name_base}_{rule_suffix}"
+
+                                            scenario_files.append(scenario_name)
+
+                                            params[counter] = [scenario_name, sp, shell, am, rc, tax, bn, fee, [], [], dt, mc]
+                                            counter = counter + 1
 
         # setting up solver and MOCAT configuration
         solver = OptimizeADR()
@@ -624,20 +676,21 @@ def grid_setup(simulation_name, MOCAT_config, target_species, target_shell, amou
         best_umpy = min(adr_dict.values())
 
         # updating the parameter grid with UMPY and welfare values in each scenario, then saving the indices of the
-        # minimum UMPY and maximum welfare within the parameter grid
+        # minimum UMPY and maximum welfare within the parameter grid.
+        # Row layout reminder: idx 7 = ouf, idx 8 = umpy, idx 9 = welfare.
         for k, v in adr_dict.items():
             for i, rows in enumerate(params):
-                if k in rows:
-                    params[i][7] = v
-                    if v == best_umpy and k == params[i][0]:
+                if rows[0] == k:
+                    params[i][8] = v  # write UMPY into its dedicated slot (was: [7], which clobbered ouf)
+                    if v == best_umpy:
                         umpy_scen = params[i][0]
                         umpy_idx = i
 
         for k, v in welfare_dict.items():
             for i, rows in enumerate(params):
-                if k in rows:
-                    params[i][8] = v
-                    if v == best_welfare and k == params[i][0]:
+                if rows[0] == k:
+                    params[i][9] = v  # write welfare into its dedicated slot (was: [8], which clobbered umpy)
+                    if v == best_welfare:
                         welfare_scen = params[i][0]
                         welfare_idx = i
 
@@ -648,7 +701,7 @@ def grid_setup(simulation_name, MOCAT_config, target_species, target_shell, amou
         umpy_rc = params[umpy_idx][4]
         umpy_tax = params[umpy_idx][5]
         umpy_bond = params[umpy_idx][6]
-        umpy_ouf = params[umpy_idx][7]
+        umpy_ouf = params[umpy_idx][7]  # correct: idx 7 is ouf
 
         welfare_species = params[welfare_idx][1]
         welfare_shell = params[welfare_idx][2]
@@ -656,7 +709,7 @@ def grid_setup(simulation_name, MOCAT_config, target_species, target_shell, amou
         welfare_rc = params[welfare_idx][4]
         welfare_tax = params[welfare_idx][5]
         welfare_bond = params[welfare_idx][6]
-        welfare_ouf = params[welfare_idx][7]
+        welfare_ouf = params[welfare_idx][7]  # correct: idx 7 is ouf
 
         # saving parameter grid
         if not os.path.exists(os.path.dirname(save_path)):
@@ -667,24 +720,42 @@ def grid_setup(simulation_name, MOCAT_config, target_species, target_shell, amou
         # saving best UMPY and welfare scenarios and the parameters used
         if not os.path.exists(os.path.dirname(f"./Results/{simulation_name}/comparisons/best_params.json")):
             os.makedirs(os.path.dirname(f"./Results/{simulation_name}/comparisons/best_params.json"))
+
+        # Build a list of baseline entries, one per maneuver_cost value.
+        # With a single maneuver_cost this is just the original single Baseline entry.
+        baseline_entries = []
+        for idx, bl_name in enumerate(baseline_names):
+            baseline_entries.append({
+                "Baseline Scenario": bl_name,
+                "Index": idx,
+                "Species": "None",
+                "Shell": "None",
+                "Amount Removed": "None",
+                "Tax": "None",
+                "Bond": "None",
+                "OUF": "None",
+                "Maneuver Cost": params[idx][11],
+                "UMPY": params[idx][8],
+                "Welfare": params[idx][9],
+            })
+
         with open(f"./Results/{simulation_name}/comparisons/best_params.json", 'w') as json_file:
-            json.dump([{"Best UMPY Scenario":umpy_scen, "Index":umpy_idx, "Species":umpy_species, "Shell":umpy_shell, "Amount Removed":umpy_am, "Removal Cost":umpy_rc, "Tax":umpy_tax, "Bond":umpy_bond, "OUF":umpy_ouf, "UMPY":best_umpy, "Welfare":params[umpy_idx][9]}, 
-                        {"Best Welfare Scenario":welfare_scen, "Index":welfare_idx, "Species":welfare_species, "Shell":welfare_shell, "Amount Removed":welfare_am, "Removal Cost":welfare_rc, "Tax":welfare_tax, "Bond":welfare_bond, "OUF":welfare_ouf, "UMPY":params[welfare_idx][8], "Welfare":best_welfare},
-                        {"Baseline Scenario":"Baseline", "Index":0, "Species":"None", "Shell":"None", "Amount Removed":"None", "Tax":"None", "Bond":"None", "OUF":"None", "UMPY":params[0][8], "Welfare":params[0][9]}], json_file, indent = 4) 
+            json.dump([{"Best UMPY Scenario":umpy_scen, "Index":umpy_idx, "Species":umpy_species, "Shell":umpy_shell, "Amount Removed":umpy_am, "Removal Cost":umpy_rc, "Tax":umpy_tax, "Bond":umpy_bond, "OUF":umpy_ouf, "Maneuver Cost":params[umpy_idx][11], "UMPY":best_umpy, "Welfare":params[umpy_idx][9]}, 
+                        {"Best Welfare Scenario":welfare_scen, "Index":welfare_idx, "Species":welfare_species, "Shell":welfare_shell, "Amount Removed":welfare_am, "Removal Cost":welfare_rc, "Tax":welfare_tax, "Bond":welfare_bond, "OUF":welfare_ouf, "Maneuver Cost":params[welfare_idx][11], "UMPY":params[welfare_idx][8], "Welfare":best_welfare},
+                        *baseline_entries], json_file, indent = 4)
 
         print("Best UMPY Achieved: " + str(best_umpy) + " with target species " + str(umpy_species) + " and " + str(umpy_am)+" removed in " + str(umpy_scen) + " scenario. ")
         print("Best UMPY Index: ", umpy_idx)
-        print("Welfare in Best UMPY Scenario: ", params[umpy_idx][8])
+        print("Welfare in Best UMPY Scenario: ", params[umpy_idx][9])  # was: [8], which is umpy
         
         print("Best Welfare Achieved: " + str(best_welfare) + " with target species " + str(welfare_species) + " and " + str(welfare_am) + " removed in " + str(welfare_scen) + " scenario. ")
         print("Best Welfare Index: ", welfare_idx)
-        print("UMPY in Best Welfare Scenario: ", params[welfare_idx][7])
+        print("UMPY in Best Welfare Scenario: ", params[welfare_idx][8])  # was: [7], which is ouf
 
         return solver.MOCAT, scenario_files, best_umpy
 
 if __name__ == "__main__":
     start_time = time.time()
-    baseline = True
     bond_amounts = [0]
     lifetimes = [5]
     
@@ -700,69 +771,42 @@ if __name__ == "__main__":
         
     }
 
-    # Generate complete scenario names list
-    scenario_files = [
-        # "Baseline_1",
-        # "Shell_1",
-        # "Shell_2",
-        # "Shell_3",
-        # "Shell_4",
-        # "Shell_5",
-        # "Shell_6",
-        # "Shell_7",
-        # "Shell_8",
-        # "Shell_9",
-        # "Shell_10",
-    ]
-    if baseline:
-        scenario_files.append("Baseline")
-    
-    MOCAT_config = json.load(open("./OPUS/configuration/10_shell_200_to_1200.json"))
+    MOCAT_config = json.load(open("./OPUS/configuration/testing_maneuvering.json"))
 
-    simulation_name = "debug_main_run_iterated_lam_5"
+    simulation_name = "10_shell_200_to_1500_trf"
     if not os.path.exists(f"./Results/{simulation_name}"):
         os.makedirs(f"./Results/{simulation_name}")
-
-    iam_solver = IAMSolver()
 
     multi_species_names = ["S","Su"]
     multi_species = MultiSpecies(multi_species_names)
 
-    # # Parallel Processing
-    # print(f"Running {len(scenario_files)} scenarios in parallel...")
-    
-    # with ProcessPoolExecutor() as executor:
-    #     n_scenarios = len(scenario_files)
-        
-    #     config_list = [MOCAT_config] * n_scenarios
-    #     sim_name_list = [simulation_name] * n_scenarios
-
-    #     # Map the function over the arguments
-    #     # process_scenario takes (scenario_name, MOCAT_config, simulation_name)
-    #     results = list(executor.map(process_scenario, 
-    #                                 scenario_files, 
-    #                                 config_list, 
-    #                                 sim_name_list))
-
+    # NOTE: The old pre-optimizer Baseline run (via IAMSolver + process_scenario) has 
+    # been removed. grid_setup now produces the Baseline itself, one per maneuver_cost 
+    # value, so there is no need to run a separate Baseline here. This saves one full 
+    # 25-year simulation per invocation.
 
     """
         Running Greedy Optimization:
         Uncomment the lines below, configure the parameters to suit your needs, then hit run as normal.
     """
-    # optimization_solver = OptimizeADR()
+    optimization_solver = OptimizeADR()
 
-    # ts = ["N_700kg"] # target species
-    # # tp = np.linspace(0, 0.5, num=2)
-    # tn = [1000] # target number of removals each year
-    # tax = [0] #[0,.1,.2,.3,.4,.5,.6,.7,.8,.9,1,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2]
-    # bond = [0] #, 100000, 200000] #[0,100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000]*1
-    # ouf = [0]*1
-    # target_shell = [12] # last number should be the number of shells + 1
-    # rc = [5000000] # could also switch to range(x,y) similar to target_shell
-    # disposal_times = [5]
+    ts = ["N_700kg"] # target species
+    # tp = np.linspace(0, 0.5, num=2)
+    tn = [1000] # target number of removals each year
+    tax = [0] #[0,.1,.2,.3,.4,.5,.6,.7,.8,.9,1,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2]
+    bond = [500000] #, 100000, 200000] #[0,100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000]*1
+    ouf = [0]*1
+    target_shell = [12] # last number should be the number of shells + 1
+    rc = [5000000] # could also switch to range(x,y) similar to target_shell
+    disposal_times = [5]
+    # Target annual per-satellite maneuver cost ($). Sweep over values to 
+    # study how maneuver expense affects launch behavior and ADR outcomes.
+    # Default [100000] preserves previous behavior.
+    maneuver_cost = [25000, 100000]  # e.g. [50000, 100000, 200000, 500000]
 
-    # # running the "grid_setup" function for "optimization" based on lower welfare values
-    # MOCAT, scenario_files, best_umpy = grid_setup(simulation_name=simulation_name, MOCAT_config=MOCAT_config, target_species=ts, target_shell=target_shell, amount_remove=tn, removal_cost=rc, tax_rate=tax, bond=bond, ouf=ouf, disposal_times=disposal_times)
+    # running the "grid_setup" function for "optimization" based on lower welfare values
+    MOCAT, scenario_files, best_umpy = grid_setup(simulation_name=simulation_name, MOCAT_config=MOCAT_config, target_species=ts, target_shell=target_shell, amount_remove=tn, removal_cost=rc, tax_rate=tax, bond=bond, ouf=ouf, disposal_times=disposal_times, maneuver_cost=maneuver_cost)
 
 
     # # if you just want to plot the results - and not re- run the simulation. You just need to pass an instance of the MOCAT model that you created. 

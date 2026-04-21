@@ -18,7 +18,7 @@ def evaluate_pmd(state_matrix, multi_species):
         num_items_fringe = state_matrix[start:end]
 
 
-        if species_name.startswith('Su'):
+        if species_name == 'Su':
             # All compliant PMD are dropped at the highest naturall compliant vector. 
             last_compliant_shell = np.where(species.econ_params.naturally_compliant_vector == 1)[0][-1]
             non_compliant_mask = (species.econ_params.naturally_compliant_vector == 0)
@@ -42,30 +42,27 @@ def evaluate_pmd(state_matrix, multi_species):
             species.sum_compliant = np.sum(compliant_derelicts)
             species.sum_non_compliant = np.sum(non_compliant_derelicts)
 
-        elif species_name.startswith('S'):
-            # 97% removed from sim, 3% fail PMD and get dropped randomly into compliant shells
-            successful_pmd = species.econ_params.comp_rate * (1 / species.deltat) * num_items_fringe
-            failed_pmd = (1 - species.econ_params.comp_rate) * (1 / species.deltat) * num_items_fringe
+        elif species_name == 'S':
+            # Successful PMD for S is modeled as complete removal from the simulation
+            # (propulsive reentry to atmospheric demise).
+            # Failed PMD leaves a derelict at the operational altitude — this matches
+            # Su's treatment of failed PMD (derelict stays in place) and is physically
+            # consistent: a failed deorbit leaves the satellite where it was.
+            # Previously, all failed-PMD S satellites were piled into the highest
+            # compliant shell, which was asymmetric with Su and hard to justify.
+            comp_rate = species.econ_params.comp_rate  # per-shell, e.g. Pm at non-compliant shells
+            successful_pmd = comp_rate * (1 / species.deltat) * num_items_fringe
+            failed_pmd = (1 - comp_rate) * (1 / species.deltat) * num_items_fringe
 
-            # Remove all satellites at end of life
+            # Remove all satellites at end of life from the active slice
             state_matrix[start:end] -= (1 / species.deltat) * num_items_fringe
 
-            # Get naturally compliant shell indices
-            compliant_indices = np.where(species.econ_params.naturally_compliant_vector == 1)[0]
+            # Failed PMD stays in place as derelicts at the operational altitude
+            state_matrix[derelict_start:derelict_end] += failed_pmd
 
-            # Distribute failed PMD to highest compliant shell only
-            derelict_addition = np.zeros_like(num_items_fringe)
-
-            total_failed = np.sum(failed_pmd)
-            
-            if len(compliant_indices) > 0:
-                # Find the highest compliant shell (assuming higher index = higher altitude)
-                highest_compliant_shell = np.max(compliant_indices)
-                
-                # Place all failed PMD satellites in the highest compliant shell
-                derelict_addition[highest_compliant_shell] = total_failed
-
-            state_matrix[derelict_start:derelict_end] += derelict_addition
+            # Successful PMD is removed entirely (no derelict left behind) — this is
+            # the key S-vs-Su asymmetry that reflects the paper's "demise" assumption
+            # for constellation satellites.
 
             species.sum_compliant = np.sum(successful_pmd)
             species.sum_non_compliant = np.sum(failed_pmd)
@@ -100,35 +97,21 @@ def evaluate_pmd_elliptical(state_matrix, state_matrix_alt, multi_species,
             species_name = species.name
             
             if species_name == 'S':
-                # get S matrix
+                # Successful PMD: complete removal (propulsive reentry to demise).
+                # Failed PMD: derelict remains at operational altitude (matches Su logic).
                 num_items_fringe = state_matrix[:, species.species_idx, 0]
+                comp_rate = species.econ_params.comp_rate
+                successful_pmd = comp_rate * (1 / species.deltat) * num_items_fringe
+                failed_pmd = (1 - comp_rate) * (1 / species.deltat) * num_items_fringe
 
-                # 97% removed from sim, 3% fail PMD and get dropped randomly into compliant shells
-                successful_pmd = species.econ_params.comp_rate * (1 / species.deltat) * num_items_fringe
-                failed_pmd = (1 - species.econ_params.comp_rate) * (1 / species.deltat) * num_items_fringe
-
-                # Remove all satellites at end of life - from both sma and alt bins
+                # Remove all at end of life from both sma and alt bins
                 state_matrix[:, species.species_idx, 0] -= (1 / species.deltat) * num_items_fringe
                 state_matrix_alt[:, species.species_idx] -= (1 / species.deltat) * num_items_fringe
 
-                # Get naturally compliant shell indices
-                compliant_indices = np.where(species.econ_params.naturally_compliant_vector == 1)[0]
+                # Failed PMD stays in place as derelicts at operational altitude
+                state_matrix[:, species.derelict_idx, 0] += failed_pmd
+                state_matrix_alt[:, species.derelict_idx] += failed_pmd
 
-                # Distribute failed PMD to highest compliant shell only
-                derelict_addition = np.zeros_like(num_items_fringe)
-
-                total_failed = np.sum(failed_pmd)
-                
-                if len(compliant_indices) > 0:
-                    # Find the highest compliant shell (assuming higher index = higher altitude)
-                    highest_compliant_shell = np.max(compliant_indices)
-                    
-                    # Place all failed PMD satellites in the highest compliant shell
-                    derelict_addition[highest_compliant_shell] = total_failed
-
-                state_matrix[:, species.derelict_idx, 0] += derelict_addition
-                state_matrix_alt[:, species.derelict_idx] += derelict_addition
-                
                 species.sum_compliant = np.sum(successful_pmd)
                 species.sum_non_compliant = np.sum(failed_pmd)
 
