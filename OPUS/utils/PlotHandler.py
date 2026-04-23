@@ -519,7 +519,7 @@ class PlotHandler:
                 fig, axes = plt.subplots(
                         nrows=num_rows,
                         ncols=num_cols,
-                        figsize=(12, 6 * num_rows)
+                        figsize=(14, 6 * num_rows)
                 )
 
                 # Flatten axes for easy iteration (in case num_rows > 1)
@@ -1633,7 +1633,7 @@ class PlotHandler:
                 fig, axes = plt.subplots(
                         nrows=num_rows,
                         ncols=num_cols,
-                        figsize=(12, 6 * num_rows)
+                        figsize=(14, 6 * num_rows)
                 )
 
                 # Flatten axes for easy iteration (in case num_rows > 1)
@@ -1722,7 +1722,7 @@ class PlotHandler:
                 fig, axes = plt.subplots(
                         nrows=num_rows,
                         ncols=num_cols,
-                        figsize=(12, 6 * num_rows)
+                        figsize=(14, 6 * num_rows)
                 )
 
                 # Flatten axes for easy iteration (in case num_rows > 1)
@@ -1809,7 +1809,7 @@ class PlotHandler:
                 rows = int(np.ceil(num_species / cols))
 
                 # Create the figure
-                fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 6), constrained_layout=True)
+                fig, axes = plt.subplots(rows, cols, figsize=(cols * 8, rows * 6), constrained_layout=True)
 
                 # Flatten axes for easy iteration (handles edge cases where rows * cols > num_species)
                 axes = axes.flatten() if num_species > 1 else [axes]
@@ -1885,7 +1885,7 @@ class PlotHandler:
                 rows = int(np.ceil(num_species / cols))
 
                 # Create the figure
-                fig, axes = plt.subplots(rows, cols, figsize=(cols * 6, rows * 6), constrained_layout=True)
+                fig, axes = plt.subplots(rows, cols, figsize=(cols * 8, rows * 6), constrained_layout=True)
 
                 # Flatten axes for easy iteration (handles edge cases where rows * cols > num_species)
                 axes = axes.flatten() if num_species > 1 else [axes]
@@ -3038,7 +3038,7 @@ class PlotHandler:
                 fig, axes = plt.subplots(
                         nrows=num_rows,
                         ncols=num_cols,
-                        figsize=(12, 6 * num_rows)
+                        figsize=(14, 6 * num_rows)
                 )
 
                 # Flatten axes for easy iteration (in case num_rows > 1)
