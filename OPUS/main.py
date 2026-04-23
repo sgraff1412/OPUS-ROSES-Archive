@@ -786,6 +786,48 @@ if __name__ == "__main__":
     multi_species_names = ["S","Su"]
     multi_species = MultiSpecies(multi_species_names)
 
+    # # NOTE: Used only in a handful of select cases; run simulations using greedy optimizer (below) if possible!
+    # # Generate complete scenario names list
+    # scenario_files = [
+    #     # "Baseline_1",
+    #     "Shell_1",
+    #     "Shell_2",
+    #     "Shell_3",
+    #     "Shell_4",
+    #     "Shell_5",
+    #     "Shell_6",
+    #     "Shell_7",
+    #     "Shell_8",
+    #     "Shell_9",
+    #     "Shell_10",
+    # ]
+
+    # scenario_files.append("Baseline")
+    
+    # MOCAT_config = json.load(open("./OPUS/configuration/testing_maneuvering_off_25.json"))
+
+    # simulation_name = "4_21_exo_imp_man_off_25"
+    # if not os.path.exists(f"./Results/{simulation_name}"):
+    #     os.makedirs(f"./Results/{simulation_name}")
+
+    # iam_solver = IAMSolver()
+
+    # # Parallel Processing
+    # print(f"Running {len(scenario_files)} scenarios in parallel...")
+    
+    # with ProcessPoolExecutor() as executor:
+    #     n_scenarios = len(scenario_files)
+        
+    #     config_list = [MOCAT_config] * n_scenarios
+    #     sim_name_list = [simulation_name] * n_scenarios
+
+    #     # Map the function over the arguments
+    #     # process_scenario takes (scenario_name, MOCAT_config, simulation_name)
+    #     results = list(executor.map(process_scenario, 
+    #                                 scenario_files, 
+    #                                 config_list, 
+    #                                 sim_name_list))
+
     # NOTE: The old pre-optimizer Baseline run (via IAMSolver + process_scenario) has 
     # been removed. grid_setup now produces the Baseline itself, one per maneuver_cost 
     # value, so there is no need to run a separate Baseline here. This saves one full 

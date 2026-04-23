@@ -255,9 +255,9 @@ class MultiSpeciesOpenAccessSolver:
         solver_options = {
             'method': 'trf',
             'verbose': 2,
-            'ftol': 1e-3,
-            'xtol': 1e-3,
-            'gtol': 1e-3,
+            'ftol': 1e-9,
+            'xtol': 1e-9,
+            'gtol': 1e-9,
             'max_nfev': 1000
         }
 

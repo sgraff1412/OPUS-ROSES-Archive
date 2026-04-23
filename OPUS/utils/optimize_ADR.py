@@ -583,11 +583,12 @@ class OptimizeADR:
                 best_welfare_so_far = welfare
                 opt_shell = cs
             elif welfare > best_welfare_so_far:
-                best_welfare_so_far = welfare
-                opt_shell = cs
+                best_welfare_so_far = welfare.copy()
+                opt_shell = cs.copy()
 
             # save shell and their welfare in a tuple list of format [(shell_num, welfare),...]
             shell_welfare.append((cs, welfare))
+            test = "test"
 
         return current_trial_results, opt_shell, removal_dict, shell_welfare
 
