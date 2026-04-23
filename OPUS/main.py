@@ -640,6 +640,12 @@ def grid_setup(simulation_name, MOCAT_config, target_species, target_shell, amou
                                             else:
                                                 name_base = f"exo"
 
+                                            # Append removal cost to scenario name when it's being swept.
+                                            # Without this, multi-value rc sweeps would produce identically
+                                            # named output files and later scenarios would overwrite earlier ones.
+                                            if len(removal_cost) > 1:
+                                                name_base = f"{name_base}_rc{int(rc)}"
+
                                             # Append maneuver cost to scenario name when it's being swept
                                             if len(maneuver_cost) > 1:
                                                 name_base = f"{name_base}_mc{int(mc)}"
@@ -773,7 +779,7 @@ if __name__ == "__main__":
 
     MOCAT_config = json.load(open("./OPUS/configuration/testing_maneuvering.json"))
 
-    simulation_name = "10_shell_300_to_1100_trf"
+    simulation_name = "10_shell_300_to_1100_trf_update"
     if not os.path.exists(f"./Results/{simulation_name}"):
         os.makedirs(f"./Results/{simulation_name}")
 
@@ -793,12 +799,14 @@ if __name__ == "__main__":
 
     ts = ["N_700kg"] # target species
     # tp = np.linspace(0, 0.5, num=2)
-    tn = [0] # target number of removals each year
+    tn = [1000] # target number of removals each year
     tax = [0] #[0,.1,.2,.3,.4,.5,.6,.7,.8,.9,1,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2]
-    bond = [500000,1000000] #, 100000, 200000] #[0,100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000]*1
+    bond = [100000] #, 100000, 200000] #[0,100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000]*1
     ouf = [0]*1
     target_shell = [11] # last number should be the number of shells + 1
-    rc = [5000000] # could also switch to range(x,y) similar to target_shell
+    rc = [5000000, 250000] # per-removal cost ($). Sweep over multiple values to study how removal
+                   # price affects ADR effectiveness, e.g. [500000, 1000000, 3000000, 5000000].
+                   # When len(rc) > 1, scenario names get an _rc{value} suffix automatically.
     disposal_times = [5]
     # Target annual per-satellite maneuver cost ($). Sweep over values to 
     # study how maneuver expense affects launch behavior and ADR outcomes.

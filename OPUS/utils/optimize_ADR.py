@@ -190,8 +190,12 @@ class OptimizeADR:
             # Each species contributes 0.5 * coef * S_species^2 where coef is that species'
             # demand coefficient and S_species is its per-period population.
             welfare_species_list = _build_welfare_species(multi_species)
-            econ_calculator = EconCalculations(self.econ_params, initial_removal_cost=5000000,
-                                                welfare_species=welfare_species_list)
+            # Pass the per-scenario removal cost (grid column 4) to EconCalculations so
+            # sweeps over `rc` actually change the per-removal price. Previously this was
+            # hardcoded to 5_000_000 here and any rc sweep was effectively ignored.
+            econ_calculator = EconCalculations(self.econ_params,
+                                               initial_removal_cost=econ_params.removal_cost,
+                                               welfare_species=welfare_species_list)
 
             # econ_params.calculate_cost_fn_parameters()
             # sammie / joey: i think we need the above line to run this but i'm not sure what the inputs would be
@@ -204,8 +208,13 @@ class OptimizeADR:
                 species.econ_params.calculate_cost_fn_parameters(species.Pm, scenario_name)            
             # species.econ_params.update_congestion_costs(multi_species, self.MOCAT.scenario_properties.x0)
             welfare_species_list = _build_welfare_species(multi_species)
-            econ_calculator = EconCalculations(self.econ_params, initial_removal_cost=5000000,
-                                                welfare_species=welfare_species_list)
+            # Use econ_params.removal_cost if set (via JSON config), else default to 5M.
+            # Baselines run 0 removals so this value is inconsequential for them; the branch
+            # is still consistent with the grid-driven branch above.
+            fallback_rc = getattr(self.econ_params, 'removal_cost', 5000000) or 5000000
+            econ_calculator = EconCalculations(self.econ_params,
+                                               initial_removal_cost=fallback_rc,
+                                               welfare_species=welfare_species_list)
 
         # For now make all satellites circular if elliptical
         if self.elliptical:
@@ -345,6 +354,8 @@ class OptimizeADR:
         # tspan = np.linspace(tf[time_idx], tf[time_idx + 1], time_step) # simulate for one year 
         tspan = np.linspace(0, 1, 2)
         shell_welfare = []
+        opt_shell = None
+        best_welfare_so_far = None
         # Propagate the model and take the final state of the environment
         if self.elliptical:
             state_next_sma, state_next_alt = self.MOCAT.propagate(tspan, current_environment, lam, elliptical=self.elliptical, use_euler=True, step_size=0.01)
@@ -442,7 +453,12 @@ class OptimizeADR:
             start_time = time.time()
             # solver guess will be lam
             solver_guess = lam_before_adr.copy()
-            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice,static_maneuver_prices=self.static_maneuver_prices)
+            # Use trial_environment_for_solver (the POST-ADR state for this trial) so
+            # the launch solver actually sees the effect of removing debris at this shell.
+            # Previously this passed environment_for_solver (pre-ADR), which made all
+            # shell trials produce near-identical welfare and caused the tiebreak at
+            # line ~572 (if welfare > best) to default to shell 1 every year.
+            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, trial_environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice,static_maneuver_prices=self.static_maneuver_prices)
 
             # Calculate solver_guess
             solver_guess = lam_before_adr.copy()
@@ -478,7 +494,8 @@ class OptimizeADR:
             # Check if there are any economic parameters that need to change (e.g demand growth of revenue)
             # multi_species.increase_demand()
 
-            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice, static_maneuver_prices=self.static_maneuver_prices)
+            # Same post-ADR state here — this is the solver that actually returns launch_rate
+            open_access = MultiSpeciesOpenAccessSolver(self.MOCAT, solver_guess, trial_environment_for_solver, "linear", lam, multi_species, years, time_idx, fringe_start_slice, fringe_end_slice, static_maneuver_prices=self.static_maneuver_prices)
 
             # Solve for equilibrium launch rates
             launch_rate = open_access.solver()
@@ -507,7 +524,7 @@ class OptimizeADR:
             # Welfare: sum of consumer surplus across all endogenous species 
             # (both S and Su contribute per the updated paper), plus any leftover
             # policy revenue that wasn't spent on ADR this period.
-            # Uses pre-ADR population plus new launches as the per-period stock.
+            # Uses post-ADR population plus new launches (equilibrium for this trial).
             consumer_surplus = 0.0
             for sp in multi_species.species:
                 if sp.name not in WELFARE_ACTIVE_SPECIES:
@@ -559,8 +576,10 @@ class OptimizeADR:
                     "bond_revenue": open_access.bond_revenue,
                 }
             }
-            # Track the best shell as we go
-            if cs == 1:
+            # Track the best shell as we go. Initialize on the first iteration (whatever
+            # shell that is) rather than hardcoding cs==1, so the tiebreak doesn't
+            # silently favor shell 1 if iteration order ever changes.
+            if opt_shell is None:
                 best_welfare_so_far = welfare
                 opt_shell = cs
             elif welfare > best_welfare_so_far:
